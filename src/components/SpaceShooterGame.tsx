@@ -135,6 +135,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [scoreMultiplier, setScoreMultiplier] = useState(1);
   const [timeSlowActive, setTimeSlowActive] = useState(false);
   const [wave, setWave] = useState(1);
+  const [invulnerable, setInvulnerable] = useState(false);
+  const [invulnerableUntil, setInvulnerableUntil] = useState(0);
   
   // Power-up states
   const [activePowerUps, setActivePowerUps] = useState<ActivePowerUps>({
@@ -178,6 +180,16 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   useEffect(() => {
     lastKillTimeRef.current = lastKillTime;
   }, [lastKillTime]);
+
+  const invulnerableRef = useRef(invulnerable);
+  useEffect(() => {
+    invulnerableRef.current = invulnerable;
+  }, [invulnerable]);
+
+  const invulnerableUntilRef = useRef(invulnerableUntil);
+  useEffect(() => {
+    invulnerableUntilRef.current = invulnerableUntil;
+  }, [invulnerableUntil]);
 
   const pickRandomPowerUpType = () => {
     const roll = Math.random();
@@ -814,9 +826,14 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           }
         });
         
-        if (playerHit) {
+        if (playerHit && !invulnerableRef.current) {
           triggerScreenShake(5);
           createParticles(playerXRef.current, 90, 10, '#ef4444');
+          
+          // Activate invulnerability for 2 seconds
+          const invulnTime = Date.now() + 2000;
+          setInvulnerable(true);
+          setInvulnerableUntil(invulnTime);
           
           setLives(prev => {
             const newLives = prev - 1;
