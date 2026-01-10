@@ -196,3 +196,72 @@ body {
 .retro-button:hover {
   transform: scale(1.02);
 }
+
+/* Mobile Touch Controls */
+.mobile-controls {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  pointer-events: none;
+}
+
+@media (max-width: 768px), (hover: none) {
+  .mobile-controls {
+    display: block;
+  }
+}
+
+.mobile-btn {
+  position: absolute;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.3);
+  border: 3px solid rgba(59, 130, 246, 0.6);
+  color: #60a5fa;
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  pointer-events: auto;
+  backdrop-filter: blur(10px);
+  transition: all 0.1s ease;
+  touch-action: manipulation;
+}
+
+.mobile-btn:active {
+  background: rgba(59, 130, 246, 0.6);
+  transform: scale(0.95);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.8);
+}
+
+.mobile-btn-left {
+  bottom: 30px;
+  left: 20px;
+}
+
+.mobile-btn-right {
+  bottom: 30px;
+  left: 110px;
+}
+
+.mobile-btn-fire {
+  bottom: 30px;
+  right: 20px;
+  background: rgba(239, 68, 68, 0.3);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #ef4444;
+  width: 80px;
+  height: 80px;
+  font-size: 32px;
+}
+
+.mobile-btn-fire:active {
+  background: rgba(239, 68, 68, 0.6);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.8);
+}

@@ -406,6 +406,74 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     return configs[Math.min(level - 1, configs.length - 1)];
   };
 
+  // Fire bullet function
+  const fireBullet = useCallback(() => {
+    if (!gameStarted || gameOver || gamePaused) return;
+    
+    const now = Date.now();
+    const fireDelay = isPowerUpActive('rapidFire') ? 100 : 200;
+    
+    if (now - lastFireTime.current > fireDelay) {
+      lastFireTime.current = now;
+      
+      // Fire bullets based on active power-ups
+      const newBullets: Bullet[] = [];
+
+      if (isPowerUpActive('laserBeam')) {
+        // Laser beam: larger, higher-damage shot with short cooldown.
+        newBullets.push({
+          id: bulletIdCounter.current++,
+          x: playerXRef.current,
+          y: 90,
+          isPlayerBullet: true,
+          damage: 4,
+          vy: -3.5,
+          kind: 'laser'
+        });
+        setBullets(prev => [...prev, ...newBullets]);
+        safeAudioCall(() => audioManager.playSound('laserHit'));
+        return;
+      }
+
+      if (isPowerUpActive('tripleShot')) {
+        // Triple shot pattern
+        newBullets.push(
+          { id: bulletIdCounter.current++, x: playerXRef.current - 2, y: 90, isPlayerBullet: true, damage: 1, vy: -2 },
+          { id: bulletIdCounter.current++, x: playerXRef.current, y: 90, isPlayerBullet: true, damage: 1, vy: -2 },
+          { id: bulletIdCounter.current++, x: playerXRef.current + 2, y: 90, isPlayerBullet: true, damage: 1, vy: -2 }
+        );
+      } else if (isPowerUpActive('doubleShot')) {
+        // Double shot pattern
+        newBullets.push(
+          { id: bulletIdCounter.current++, x: playerXRef.current - 1, y: 90, isPlayerBullet: true, damage: 1, vy: -2 },
+          { id: bulletIdCounter.current++, x: playerXRef.current + 1, y: 90, isPlayerBullet: true, damage: 1, vy: -2 }
+        );
+      } else {
+        // Single shot
+        newBullets.push(
+          { id: bulletIdCounter.current++, x: playerXRef.current, y: 90, isPlayerBullet: true, damage: 1, vy: -2 }
+        );
+      }
+
+      // Optional add-on: homing missile (fires alongside normal shots).
+      if (isPowerUpActive('homingMissile')) {
+        newBullets.push({
+          id: bulletIdCounter.current++,
+          x: playerXRef.current,
+          y: 89,
+          isPlayerBullet: true,
+          damage: 2,
+          vy: -1.8,
+          vx: 0,
+          kind: 'missile'
+        });
+      }
+      
+      setBullets(prev => [...prev, ...newBullets]);
+      safeAudioCall(() => audioManager.playSound('laserHit'));
+    }
+  }, [gameStarted, gameOver, gamePaused]);
+
   // Handle keyboard input
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
@@ -416,68 +484,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       
       if (e.key === ' ' && gameStarted && !gameOver && !gamePaused) {
         e.preventDefault();
-        const now = Date.now();
-        const fireDelay = isPowerUpActive('rapidFire') ? 100 : 200;
-        
-        if (now - lastFireTime.current > fireDelay) {
-          lastFireTime.current = now;
-          
-          // Fire bullets based on active power-ups
-          const newBullets: Bullet[] = [];
-
-          if (isPowerUpActive('laserBeam')) {
-            // Laser beam: larger, higher-damage shot with short cooldown.
-            newBullets.push({
-              id: bulletIdCounter.current++,
-              x: playerXRef.current,
-              y: 90,
-              isPlayerBullet: true,
-              damage: 4,
-              vy: -3.5,
-              kind: 'laser'
-            });
-            setBullets(prev => [...prev, ...newBullets]);
-            safeAudioCall(() => audioManager.playSound('laserHit'));
-            return;
-          }
-
-          if (isPowerUpActive('tripleShot')) {
-            // Triple shot pattern
-            newBullets.push(
-              { id: bulletIdCounter.current++, x: playerXRef.current - 2, y: 90, isPlayerBullet: true, damage: 1, vy: -2 },
-              { id: bulletIdCounter.current++, x: playerXRef.current, y: 90, isPlayerBullet: true, damage: 1, vy: -2 },
-              { id: bulletIdCounter.current++, x: playerXRef.current + 2, y: 90, isPlayerBullet: true, damage: 1, vy: -2 }
-            );
-          } else if (isPowerUpActive('doubleShot')) {
-            // Double shot pattern
-            newBullets.push(
-              { id: bulletIdCounter.current++, x: playerXRef.current - 1, y: 90, isPlayerBullet: true, damage: 1, vy: -2 },
-              { id: bulletIdCounter.current++, x: playerXRef.current + 1, y: 90, isPlayerBullet: true, damage: 1, vy: -2 }
-            );
-          } else {
-            // Single shot
-            newBullets.push(
-              { id: bulletIdCounter.current++, x: playerXRef.current, y: 90, isPlayerBullet: true, damage: 1, vy: -2 }
-            );
-          }
-
-          // Optional add-on: homing missile (fires alongside normal shots).
-          if (isPowerUpActive('homingMissile')) {
-            newBullets.push({
-              id: bulletIdCounter.current++,
-              x: playerXRef.current,
-              y: 89,
-              isPlayerBullet: true,
-              damage: 2,
-              vy: -1.8,
-              vx: 0,
-              kind: 'missile'
-            });
-          }
-          
-          setBullets(prev => [...prev, ...newBullets]);
-          safeAudioCall(() => audioManager.playSound('laserHit'));
-        }
+        fireBullet();
       }
       
       // Handle pause with ESC key
@@ -873,7 +880,6 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       checkPlayerCollisions();
 
       // Spawn new aliens based on wave
-      const now = Date.now();
       const spawnDelay = Math.max(500, 2000 - wave * 100);
       
       if (now - lastAlienSpawnRef.current > spawnDelay) {
@@ -1255,6 +1261,44 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           className="alien"
           style={{ left: `${alien.x}%`, top: `${alien.y}%` }}
         >
+          {/* Boss health bar */}
+          {alien.type === EnemyType.BOSS && (
+            <div style={{
+              position: 'absolute',
+              top: '-15px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '120px',
+              height: '8px',
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              borderRadius: '4px',
+              border: '1px solid #fbbf24',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                width: `${(alien.health / alien.maxHealth) * 100}%`,
+                height: '100%',
+                backgroundColor: alien.health > alien.maxHealth * 0.5 ? '#22c55e' : alien.health > alien.maxHealth * 0.25 ? '#fbbf24' : '#ef4444',
+                transition: 'width 0.2s ease-out, background-color 0.3s ease'
+              }} />
+              <div style={{
+                position: 'absolute',
+                top: '0',
+                left: '0',
+                right: '0',
+                bottom: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '8px',
+                fontWeight: 'bold',
+                color: '#fff',
+                textShadow: '0 0 2px #000'
+              }}>
+                {alien.health}/{alien.maxHealth}
+              </div>
+            </div>
+          )}
           <svg viewBox="0 0 50 50" className="w-full h-full">
             <defs>
               <linearGradient id={`alienGradient${alien.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
@@ -1398,6 +1442,44 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           <div className="mt-8 text-green-400/50 text-xs" style={{ fontFamily: 'monospace' }}>
             © 1982 CLASSIC ARCADE
           </div>
+        </div>
+      )}
+
+      {/* Mobile Touch Controls */}
+      {gameStarted && !gameOver && (
+        <div className="mobile-controls">
+          {/* Left button */}
+          <button
+            className="mobile-btn mobile-btn-left"
+            onTouchStart={() => keysPressed.current.add('arrowleft')}
+            onTouchEnd={() => keysPressed.current.delete('arrowleft')}
+            onMouseDown={() => keysPressed.current.add('arrowleft')}
+            onMouseUp={() => keysPressed.current.delete('arrowleft')}
+            onMouseLeave={() => keysPressed.current.delete('arrowleft')}
+          >
+            ◀
+          </button>
+          
+          {/* Right button */}
+          <button
+            className="mobile-btn mobile-btn-right"
+            onTouchStart={() => keysPressed.current.add('arrowright')}
+            onTouchEnd={() => keysPressed.current.delete('arrowright')}
+            onMouseDown={() => keysPressed.current.add('arrowright')}
+            onMouseUp={() => keysPressed.current.delete('arrowright')}
+            onMouseLeave={() => keysPressed.current.delete('arrowright')}
+          >
+            ▶
+          </button>
+          
+          {/* Fire button */}
+          <button
+            className="mobile-btn mobile-btn-fire"
+            onTouchStart={() => fireBullet()}
+            onClick={() => fireBullet()}
+          >
+            🔥
+          </button>
         </div>
       )}
 
