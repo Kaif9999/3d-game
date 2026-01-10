@@ -1,0 +1,135 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #000;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.game-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.player-ship {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 60px;
+  transition: left 0.05s ease-out;
+  filter: drop-shadow(0 0 8px #3b82f6);
+}
+
+
+.alien {
+  position: absolute;
+  width: 50px;
+  height: 50px;
+  transition: top 0.05s linear;
+  filter: drop-shadow(0 0 10px #ef4444);
+}
+
+
+.bullet {
+  position: absolute;
+  width: 2px;
+  height: 6px;
+  background: linear-gradient(180deg, #ff6b6b 0%, #ef4444 50%, #dc2626 100%);
+  border-radius: 1px;
+  box-shadow: 0 0 6px #ef4444, 0 0 10px #ef4444;
+}
+
+.explosion {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0%, #ff6b6b 30%, #feca57 60%, transparent 80%);
+  animation: explode 0.4s ease-out forwards;
+  box-shadow: 0 0 20px #ff6b6b, 0 0 40px #feca57;
+}
+
+@keyframes explode {
+  0% {
+    transform: scale(0.5);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+@keyframes twinkle {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.star {
+  position: absolute;
+  background: white;
+  border-radius: 50%;
+}
+
+.life {
+  width: 24px;
+  height: 24px;
+  background: #22d3ee;
+  border: 2px solid #22d3ee;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+
+.life.active {
+  opacity: 1;
+  background: #22d3ee;
+}
+
+.retro-title {
+  font-family: monospace;
+  letter-spacing: 0.2em;
+  font-weight: 800;
+  text-shadow: none;
+  text-transform: uppercase;
+}
+
+.score-display {
+  font-family: monospace;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-shadow: none;
+  background: black !important;
+  border: 3px solid #22d3ee !important;
+  color: #22d3ee !important;
+}
+
+.game-over-text {
+  letter-spacing: 0.05em;
+  font-weight: 800;
+  text-shadow: none;
+}
+
+.retro-box {
+  background: black;
+  border: 4px solid;
+}
+
+.retro-button {
+  font-family: monospace;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.retro-button:hover {
+  transform: scale(1.02);
+}
