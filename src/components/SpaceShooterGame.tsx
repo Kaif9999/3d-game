@@ -267,7 +267,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const starIdCounter = useRef(0);
   const particleIdCounter = useRef(0);
   const powerUpIdCounter = useRef(0);
-  const gameLoopRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const gameLoopRef = useRef<number | null>(null);
+  const lastFrameTimeRef = useRef(0);
   const lastAlienSpawnRef = useRef(0);
   const lastFireTime = useRef(0);
   const keysPressed = useRef<Set<string>>(new Set());
@@ -514,6 +515,13 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     if (!gameStarted || gameOver || gamePaused) return;
 
     const gameLoop = () => {
+      const now = Date.now();
+      
+      // Check and disable invulnerability if expired
+      if (invulnerableRef.current && now > invulnerableUntilRef.current) {
+        setInvulnerable(false);
+      }
+      
       const frameMultiplier = isPowerUpActive('timeSlow') ? 0.55 : 1;
 
       // Move player with speed boost
@@ -914,11 +922,25 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       }
     };
 
-    gameLoopRef.current = setInterval(gameLoop, 50);
+    const animate = () => {
+      const now = performance.now();
+      const deltaTime = now - lastFrameTimeRef.current;
+      
+      // Target 60 FPS (16.67ms per frame)
+      if (deltaTime >= 16.67) {
+        gameLoop();
+        lastFrameTimeRef.current = now;
+      }
+      
+      gameLoopRef.current = requestAnimationFrame(animate);
+    };
+    
+    lastFrameTimeRef.current = performance.now();
+    gameLoopRef.current = requestAnimationFrame(animate);
 
     return () => {
       if (gameLoopRef.current) {
-        clearInterval(gameLoopRef.current);
+        cancelAnimationFrame(gameLoopRef.current);
       }
     };
   }, [gameStarted, gameOver, gamePaused, wave]);
@@ -1189,7 +1211,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           className="player-ship"
           style={{ 
             left: `${playerX}%`,
-            transform: `translateX(-50%) ${screenShake > 0 ? `translate(${Math.random() * screenShake - screenShake/2}px, ${Math.random() * screenShake - screenShake/2}px)` : ''}`
+            transform: `translateX(-50%) ${screenShake > 0 ? `translate(${Math.random() * screenShake - screenShake/2}px, ${Math.random() * screenShake - screenShake/2}px)` : ''}`,
+            opacity: invulnerable ? (Math.floor(Date.now() / 100) % 2 === 0 ? 0.3 : 1) : 1
           }}
         >
           <svg viewBox="0 0 30 30" className="w-full h-full">
