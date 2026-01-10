@@ -4,23 +4,57 @@ A classic 2D space shooter game built with Next.js 16 and Tailwind CSS, inspired
 
 ## Features
 
-- **Player Ship**: Blue spaceship controlled by keyboard
-- **Alien Enemies**: Red aliens that descend from the top
-- **Shooting Mechanics**: Fire blue bullets to destroy aliens
-- **Score System**: Earn 100 points per alien destroyed
-- **Lives System**: Start with 3 lives (displayed as blue diamonds)
-- **Progressive Difficulty**: Game gets harder as score increases
-- **Visual Effects**: 
-  - Animated starfield background
-  - Explosion effects when aliens are destroyed
-  - Glowing effects on UI elements
-- **Game States**: Start screen, gameplay, and game over screen
+### Core Gameplay
+- **Player Ship**: Blue spaceship with smooth controls
+- **6 Enemy Types**: Basic, Fast, Tank, Zigzag, Shooter, and Boss enemies
+- **Shooting Mechanics**: Fire bullets to destroy aliens
+- **Wave System**: Progressive difficulty with endless waves
+- **Lives System**: Start with 3 lives, collect power-ups for more (max 5)
+- **Combo System**: Chain kills for bonus points
+
+### Power-Up System (10 Types)
+- **⚡⚡ Double Shot**: Fire two bullets simultaneously
+- **⚡⚡⚡ Triple Shot**: Fire three bullets in a spread pattern
+- **🛡️ Shield**: Temporary invincibility
+- **⚡ Speed Boost**: Increased movement speed
+- **🔥 Rapid Fire**: Faster shooting rate
+- **🔆 Laser Beam**: Continuous damage beam (visual indicator)
+- **🎯 Homing Missile**: Smart targeting (visual indicator)
+- **⏱️ Time Slow**: Slows enemy movement by 50%
+- **✨ Score Multiplier**: 2x points for 10 seconds
+- **❤️ Extra Life**: Gain an additional life
+
+### Visual Effects
+- **Animated Starfield**: Scrolling background with 100 stars
+- **Particle System**: Colorful explosions and effects
+- **Boss Health Bar**: Prominent HP display for boss enemies
+- **Power-Up Icons**: Spinning, glowing collectibles
+- **Screen Shake**: Impact feedback on hits
+- **Glowing Effects**: Ships, bullets, and UI elements
+
+### Controls
+- **Desktop**: Arrow keys/WASD + Space to shoot, ESC to pause
+- **Mobile**: Touch controls with swipe movement and fire button
+
+### Game States
+- **Start Screen**: Retro-styled menu with controls
+- **Gameplay**: Active combat with HUD
+- **Pause Menu**: ESC to pause/resume/restart/quit
+- **Game Over**: Final score with play again option
 
 ## Controls
 
+### Desktop
 - **Move Left**: `←` (Left Arrow) or `A`
 - **Move Right**: `→` (Right Arrow) or `D`
 - **Shoot**: `SPACE`
+- **Pause**: `ESC`
+- **Mute/Unmute**: Click button in HUD
+
+### Mobile
+- **Move**: Swipe left/right on screen
+- **Shoot**: Tap the fire button (🔥)
+- **Pause**: Not available on mobile (coming soon)
 
 ## How to Play
 
@@ -100,6 +134,40 @@ The game will be available at [http://localhost:3000](http://localhost:3000)
 - Optimized game loop running at 20 FPS (50ms intervals)
 - Efficient state management with React hooks
 - Smooth animations using CSS transforms
+
+## Recent Updates (v1.1.0)
+
+### 🎮 New Features
+- ✅ Visual power-up icons with spinning animations
+- ✅ Boss health bar with real-time HP display
+- ✅ Mobile touch controls (swipe + fire button)
+- ✅ Score multiplier power-up (2x points)
+- ✅ Time slow power-up (50% enemy speed reduction)
+- ✅ Extra life power-up (up to 5 lives)
+
+### ⚡ Performance
+- ✅ Replaced setInterval with requestAnimationFrame (60 FPS)
+- ✅ Smoother gameplay and better frame timing
+- ✅ Reduced CPU usage when tab is inactive
+
+### 🎨 UI/UX
+- ✅ Enhanced power-up indicators with icons
+- ✅ Color-coded power-up system
+- ✅ Dynamic lives display (scales to 5)
+- ✅ Improved particle effects
+
+See [CHANGELOG.md](./CHANGELOG.md) for full details.
+
+## Future Improvements
+
+See [FEATURE_REQUESTS.md](./FEATURE_REQUESTS.md) for planned features including:
+- Component refactoring for better code organization
+- Difficulty settings (Easy/Normal/Hard)
+- Achievements system
+- Local leaderboard
+- More enemy types
+- Special weapons
+- And 15+ more improvements!
 
 ## License
 

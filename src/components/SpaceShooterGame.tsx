@@ -151,11 +151,16 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const starIdCounter = useRef(0);
   const particleIdCounter = useRef(0);
   const powerUpIdCounter = useRef(0);
-  const gameLoopRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const gameLoopRef = useRef<number | null>(null);
   const lastAlienSpawnRef = useRef(0);
   const lastFireTime = useRef(0);
   const keysPressed = useRef<Set<string>>(new Set());
   const screenShakeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFrameTime = useRef(0);
+  
+  // Mobile touch controls
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [isTouching, setIsTouching] = useState(false);
   
   // Use refs to track current state for collision detection
   const aliensRef = useRef<Alien[]>([]);
@@ -242,7 +247,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
 
   // Helper function to spawn power-up
   const spawnPowerUp = (x: number, y: number) => {
-    if (Math.random() < 0.2) { // 20% chance
+    if (Math.random() < 0.25) { // 25% chance (increased from 20%)
       const types = Object.values(PowerUpType);
       const type = types[Math.floor(Math.random() * types.length)];
       setPowerUps(prev => [...prev, {
@@ -252,6 +257,40 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         type,
         speed: 0.3
       }]);
+    }
+  };
+  
+  // Helper function to get power-up color
+  const getPowerUpColor = (type: PowerUpType): string => {
+    switch (type) {
+      case PowerUpType.DOUBLE_SHOT: return '#3b82f6'; // blue
+      case PowerUpType.TRIPLE_SHOT: return '#a855f7'; // purple
+      case PowerUpType.SHIELD: return '#22d3ee'; // cyan
+      case PowerUpType.SPEED_BOOST: return '#fbbf24'; // yellow
+      case PowerUpType.RAPID_FIRE: return '#ef4444'; // red
+      case PowerUpType.LASER_BEAM: return '#10b981'; // green
+      case PowerUpType.HOMING_MISSILE: return '#f97316'; // orange
+      case PowerUpType.TIME_SLOW: return '#8b5cf6'; // violet
+      case PowerUpType.SCORE_MULTIPLIER: return '#f59e0b'; // amber
+      case PowerUpType.EXTRA_LIFE: return '#ec4899'; // pink
+      default: return '#ffffff';
+    }
+  };
+  
+  // Helper function to get power-up icon
+  const getPowerUpIcon = (type: PowerUpType): string => {
+    switch (type) {
+      case PowerUpType.DOUBLE_SHOT: return '⚡⚡';
+      case PowerUpType.TRIPLE_SHOT: return '⚡⚡⚡';
+      case PowerUpType.SHIELD: return '🛡️';
+      case PowerUpType.SPEED_BOOST: return '⚡';
+      case PowerUpType.RAPID_FIRE: return '🔥';
+      case PowerUpType.LASER_BEAM: return '🔆';
+      case PowerUpType.HOMING_MISSILE: return '🎯';
+      case PowerUpType.TIME_SLOW: return '⏱️';
+      case PowerUpType.SCORE_MULTIPLIER: return '✨';
+      case PowerUpType.EXTRA_LIFE: return '❤️';
+      default: return '?';
     }
   };
 
@@ -363,11 +402,74 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     };
   }, [gameStarted, gameOver, gamePaused, playerX]);
 
+  // Mobile touch controls
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      if (!gameStarted || gameOver || gamePaused) return;
+      
+      const touch = e.touches[0];
+      setTouchStartX(touch.clientX);
+      setIsTouching(true);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!gameStarted || gameOver || gamePaused || touchStartX === null) return;
+      e.preventDefault();
+      
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - touchStartX;
+      const sensitivity = 0.15;
+      
+      setPlayerX(prev => {
+        const newX = prev + deltaX * sensitivity;
+        return Math.max(5, Math.min(95, newX));
+      });
+      
+      setTouchStartX(touch.clientX);
+    };
+
+    const handleTouchEnd = () => {
+      setTouchStartX(null);
+      setIsTouching(false);
+    };
+
+    window.addEventListener('touchstart', handleTouchStart);
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [gameStarted, gameOver, gamePaused, touchStartX]);
+
   // Game loop
   useEffect(() => {
-    if (!gameStarted || gameOver || gamePaused) return;
+    if (!gameStarted || gameOver || gamePaused) {
+      if (gameLoopRef.current) {
+        cancelAnimationFrame(gameLoopRef.current);
+        gameLoopRef.current = null;
+      }
+      return;
+    }
 
-    const gameLoop = () => {
+    const gameLoop = (currentTime: number) => {
+      // Calculate delta time for consistent gameplay
+      if (!lastFrameTime.current) lastFrameTime.current = currentTime;
+      const deltaTime = currentTime - lastFrameTime.current;
+      
+      // Time slow power-up increases frame delay
+      const timeSlowMultiplier = activePowerUps.timeSlow > Date.now() ? 1.5 : 1;
+      const targetFrameTime = 50 * timeSlowMultiplier;
+      
+      // Target 60 FPS (16.67ms per frame), but run game logic at ~20 FPS (50ms)
+      if (deltaTime < targetFrameTime) {
+        gameLoopRef.current = requestAnimationFrame(gameLoop);
+        return;
+      }
+      
+      lastFrameTime.current = currentTime;
       // Move player with speed boost
       setPlayerX(prev => {
         let newX = prev;
@@ -476,7 +578,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               aliensToRemove.add(alien.id);
               const stats = getEnemyStats(alien.type);
               
-              // Update score with combo
+              // Update score with combo and multiplier
               const now = Date.now();
               if (now - lastKillTime < 1000) {
                 setCombo(prev => prev + 1);
@@ -485,7 +587,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               }
               setLastKillTime(now);
               
-              const points = stats.points * (1 + combo * 0.1);
+              const comboMultiplier = 1 + combo * 0.1;
+              const scoreMultiplier = activePowerUps.scoreMultiplier > Date.now() ? 2 : 1;
+              const points = stats.points * comboMultiplier * scoreMultiplier;
               setScore(prev => prev + Math.floor(points));
               
               // Spawn power-up chance
@@ -536,12 +640,18 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           powerUpsToRemove.add(powerUp.id);
           
           // Apply power-up effect
-          setActivePowerUps(prev => ({
-            ...prev,
-            [powerUp.type]: Date.now() + 10000 // 10 seconds duration
-          }));
+          if (powerUp.type === PowerUpType.EXTRA_LIFE) {
+            // Extra life gives immediate life
+            setLives(prev => Math.min(prev + 1, 5)); // Max 5 lives
+            createParticles(powerUp.x, powerUp.y, 12, '#ec4899');
+          } else {
+            setActivePowerUps(prev => ({
+              ...prev,
+              [powerUp.type]: Date.now() + 10000 // 10 seconds duration
+            }));
+            createParticles(powerUp.x, powerUp.y, 8, getPowerUpColor(powerUp.type));
+          }
           
-          createParticles(powerUp.x, powerUp.y, 6, '#22d3ee');
           safeAudioCall(() => audioManager.playSound('gameStart')); // Reuse sound for power-up
         }
       });
@@ -712,14 +822,20 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         setWave(prev => prev + 1);
         createParticles(50, 50, 20, '#22d3ee');
       }
+      
+      // Continue the loop
+      gameLoopRef.current = requestAnimationFrame(gameLoop);
     };
 
-    gameLoopRef.current = setInterval(gameLoop, 50);
+    // Start the game loop
+    gameLoopRef.current = requestAnimationFrame(gameLoop);
 
     return () => {
       if (gameLoopRef.current) {
-        clearInterval(gameLoopRef.current);
+        cancelAnimationFrame(gameLoopRef.current);
+        gameLoopRef.current = null;
       }
+      lastFrameTime.current = 0;
     };
   }, [gameStarted, gameOver, gamePaused, score, playerX, wave, combo, highScore, activePowerUps, lastKillTime]);
 
@@ -833,7 +949,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         
         <div className="relative flex justify-between items-center">
           <div className="flex gap-2 items-center">
-            {[...Array(3)].map((_, i) => (
+            {[...Array(Math.max(3, lives))].map((_, i) => (
               <div
                 key={i}
                 className={`life ${i < lives ? 'active' : ''}`}
@@ -874,30 +990,50 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         </div>
         
         {/* Power-up indicators */}
-        <div className="flex gap-2 mt-2 justify-end">
+        <div className="flex gap-2 mt-2 justify-end flex-wrap">
           {activePowerUps.doubleShot > Date.now() && (
-            <div className="px-2 py-1 bg-blue-500 text-white font-mono text-xs">
-              DOUBLE SHOT: {Math.ceil((activePowerUps.doubleShot - Date.now()) / 1000)}s
+            <div className="px-2 py-1 bg-blue-500 text-white font-mono text-xs rounded">
+              ⚡⚡ {Math.ceil((activePowerUps.doubleShot - Date.now()) / 1000)}s
             </div>
           )}
           {activePowerUps.tripleShot > Date.now() && (
-            <div className="px-2 py-1 bg-purple-500 text-white font-mono text-xs">
-              TRIPLE SHOT: {Math.ceil((activePowerUps.tripleShot - Date.now()) / 1000)}s
+            <div className="px-2 py-1 bg-purple-500 text-white font-mono text-xs rounded">
+              ⚡⚡⚡ {Math.ceil((activePowerUps.tripleShot - Date.now()) / 1000)}s
             </div>
           )}
           {activePowerUps.shield > Date.now() && (
-            <div className="px-2 py-1 bg-green-500 text-white font-mono text-xs">
-              SHIELD: {Math.ceil((activePowerUps.shield - Date.now()) / 1000)}s
+            <div className="px-2 py-1 bg-cyan-500 text-white font-mono text-xs rounded">
+              🛡️ {Math.ceil((activePowerUps.shield - Date.now()) / 1000)}s
             </div>
           )}
           {activePowerUps.speedBoost > Date.now() && (
-            <div className="px-2 py-1 bg-yellow-500 text-white font-mono text-xs">
-              SPEED: {Math.ceil((activePowerUps.speedBoost - Date.now()) / 1000)}s
+            <div className="px-2 py-1 bg-yellow-500 text-white font-mono text-xs rounded">
+              ⚡ {Math.ceil((activePowerUps.speedBoost - Date.now()) / 1000)}s
             </div>
           )}
           {activePowerUps.rapidFire > Date.now() && (
-            <div className="px-2 py-1 bg-red-500 text-white font-mono text-xs">
-              RAPID FIRE: {Math.ceil((activePowerUps.rapidFire - Date.now()) / 1000)}s
+            <div className="px-2 py-1 bg-red-500 text-white font-mono text-xs rounded">
+              🔥 {Math.ceil((activePowerUps.rapidFire - Date.now()) / 1000)}s
+            </div>
+          )}
+          {activePowerUps.laserBeam > Date.now() && (
+            <div className="px-2 py-1 bg-green-500 text-white font-mono text-xs rounded">
+              🔆 {Math.ceil((activePowerUps.laserBeam - Date.now()) / 1000)}s
+            </div>
+          )}
+          {activePowerUps.homingMissile > Date.now() && (
+            <div className="px-2 py-1 bg-orange-500 text-white font-mono text-xs rounded">
+              🎯 {Math.ceil((activePowerUps.homingMissile - Date.now()) / 1000)}s
+            </div>
+          )}
+          {activePowerUps.timeSlow > Date.now() && (
+            <div className="px-2 py-1 bg-violet-500 text-white font-mono text-xs rounded">
+              ⏱️ {Math.ceil((activePowerUps.timeSlow - Date.now()) / 1000)}s
+            </div>
+          )}
+          {activePowerUps.scoreMultiplier > Date.now() && (
+            <div className="px-2 py-1 bg-amber-500 text-white font-mono text-xs rounded">
+              ✨ 2x {Math.ceil((activePowerUps.scoreMultiplier - Date.now()) / 1000)}s
             </div>
           )}
         </div>
@@ -1015,6 +1151,26 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           className="alien"
           style={{ left: `${alien.x}%`, top: `${alien.y}%` }}
         >
+          {/* Boss Health Bar */}
+          {alien.type === EnemyType.BOSS && (
+            <div 
+              className="absolute -top-4 left-1/2 transform -translate-x-1/2 w-32"
+              style={{ zIndex: 100 }}
+            >
+              <div className="bg-gray-800 h-2 rounded-full border border-red-500">
+                <div 
+                  className="bg-gradient-to-r from-red-600 to-red-400 h-full rounded-full transition-all duration-200"
+                  style={{ 
+                    width: `${(alien.health / alien.maxHealth) * 100}%`,
+                    boxShadow: '0 0 10px #ef4444'
+                  }}
+                />
+              </div>
+              <div className="text-center text-xs text-red-400 font-mono mt-1">
+                BOSS: {alien.health}/{alien.maxHealth}
+              </div>
+            </div>
+          )}
           <svg viewBox="0 0 50 50" className="w-full h-full">
             <defs>
               <linearGradient id={`alienGradient${alien.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
@@ -1067,6 +1223,31 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           className="bullet"
           style={{ left: `${bullet.x}%`, top: `${bullet.y}%` }}
         />
+      ))}
+
+      {/* Power-ups */}
+      {gameStarted && !gameOver && powerUps.map((powerUp) => (
+        <div
+          key={powerUp.id}
+          className="absolute transition-all duration-100"
+          style={{ 
+            left: `${powerUp.x}%`, 
+            top: `${powerUp.y}%`,
+            transform: 'translate(-50%, -50%)',
+            animation: 'spin 2s linear infinite'
+          }}
+        >
+          <div 
+            className="w-8 h-8 rounded-full flex items-center justify-center text-xl"
+            style={{
+              backgroundColor: getPowerUpColor(powerUp.type),
+              boxShadow: `0 0 20px ${getPowerUpColor(powerUp.type)}`,
+              border: '2px solid white'
+            }}
+          >
+            {getPowerUpIcon(powerUp.type)}
+          </div>
+        </div>
       ))}
 
       {/* Explosions */}
@@ -1144,6 +1325,54 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           <div className="mt-8 text-green-400/50 text-xs" style={{ fontFamily: 'monospace' }}>
             © 1982 CLASSIC ARCADE
           </div>
+        </div>
+      )}
+
+      {/* Mobile Controls */}
+      {gameStarted && !gameOver && !gamePaused && (
+        <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-8 z-20 md:hidden">
+          {/* Fire Button */}
+          <button
+            onTouchStart={async (e) => {
+              e.preventDefault();
+              await audioManager.initializeOnUserInteraction();
+              
+              const now = Date.now();
+              const fireDelay = activePowerUps.rapidFire > 0 ? 100 : 200;
+              
+              if (now - lastFireTime.current > fireDelay) {
+                lastFireTime.current = now;
+                
+                const newBullets: Bullet[] = [];
+                
+                if (activePowerUps.tripleShot > 0) {
+                  newBullets.push(
+                    { id: bulletIdCounter.current++, x: playerX - 2, y: 90, isPlayerBullet: true, damage: 1 },
+                    { id: bulletIdCounter.current++, x: playerX, y: 90, isPlayerBullet: true, damage: 1 },
+                    { id: bulletIdCounter.current++, x: playerX + 2, y: 90, isPlayerBullet: true, damage: 1 }
+                  );
+                } else if (activePowerUps.doubleShot > 0) {
+                  newBullets.push(
+                    { id: bulletIdCounter.current++, x: playerX - 1, y: 90, isPlayerBullet: true, damage: 1 },
+                    { id: bulletIdCounter.current++, x: playerX + 1, y: 90, isPlayerBullet: true, damage: 1 }
+                  );
+                } else {
+                  newBullets.push(
+                    { id: bulletIdCounter.current++, x: playerX, y: 90, isPlayerBullet: true, damage: 1 }
+                  );
+                }
+                
+                setBullets(prev => [...prev, ...newBullets]);
+              }
+            }}
+            className="w-20 h-20 rounded-full bg-red-500 border-4 border-red-300 text-white font-bold text-2xl active:bg-red-600 active:scale-95 transition-all"
+            style={{ 
+              boxShadow: '0 0 20px rgba(239, 68, 68, 0.8)',
+              touchAction: 'none'
+            }}
+          >
+            🔥
+          </button>
         </div>
       )}
 
