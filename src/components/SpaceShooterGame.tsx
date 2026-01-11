@@ -46,7 +46,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [scoreMultiplier, setScoreMultiplier] = useState(1);
   const [timeSlowActive, setTimeSlowActive] = useState(false);
   const [wave, setWave] = useState(1);
-  
+  const [levelTransition, setLevelTransition] = useState(false);
+  const [levelUpText, setLevelUpText] = useState('');
+
   // Power-up states
   const [activePowerUps, setActivePowerUps] = useState<ActivePowerUps>({
     doubleShot: 0,
@@ -716,7 +718,25 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       
       // Check wave progression
       if (currentAliens.length === 0 && score > 0) {
-        setWave(prev => prev + 1);
+        setWave(prev => {
+          const newWave = prev + 1;
+
+          // Level up every 5 waves
+          if (newWave % 5 === 1 && newWave > 1) {
+            const newLevel = Math.floor((newWave - 1) / 5) + 1;
+            setLevel(newLevel);
+            setLevelTransition(true);
+            const config = getLevelConfig(newLevel);
+            setLevelUpText(`LEVEL ${newLevel}: ${config.description}`);
+
+            // Hide level transition after 3 seconds
+            setTimeout(() => {
+              setLevelTransition(false);
+            }, 3000);
+          }
+
+          return newWave;
+        });
         createParticles(50, 50, 20, '#22d3ee');
       }
     };
@@ -746,6 +766,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setExplosions([]);
     setParticles([]);
     setWave(1);
+    setLevel(1);
+    setLevelTransition(false);
+    setLevelUpText('');
     setCombo(0);
     setLastKillTime(0);
     setScreenShake(0);
@@ -800,6 +823,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setExplosions([]);
     setParticles([]);
     setWave(1);
+    setLevel(1);
+    setLevelTransition(false);
+    setLevelUpText('');
     setCombo(0);
     setLastKillTime(0);
     setScreenShake(0);
@@ -959,18 +985,23 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           </div>
           
           <div className="flex gap-4 items-center">
+            {/* Level indicator */}
+            <div className="text-cyan-400 font-mono text-lg border-2 border-cyan-400 px-3 py-1 bg-black/50">
+              LVL {level}
+            </div>
+
             {/* Wave indicator */}
             <div className="text-green-400 font-mono text-lg">
               WAVE: {wave}
             </div>
-            
+
             {/* Combo indicator */}
             {combo > 1 && (
               <div className="text-yellow-400 font-mono text-lg animate-pulse">
                 COMBO x{combo}
               </div>
             )}
-            
+
             {/* Score */}
             <div className="score-display text-2xl font-bold px-4 py-2">
               SCORE: {score.toString().padStart(6, '0')}
@@ -1035,6 +1066,22 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         )}
       </div>
       
+      {/* Level Transition Notification */}
+      {levelTransition && (
+        <div className="absolute inset-0 flex items-center justify-center z-25 pointer-events-none">
+          <div className="retro-box border-4 border-cyan-400 bg-black/90 p-8 animate-pulse">
+            <h2 className="text-5xl font-bold text-cyan-400 text-center" style={{
+              fontFamily: 'monospace',
+              letterSpacing: '0.3em',
+              textTransform: 'uppercase',
+              textShadow: '0 0 20px rgba(34, 211, 238, 0.8)'
+            }}>
+              {levelUpText}
+            </h2>
+          </div>
+        </div>
+      )}
+
       {/* Pause Menu */}
       {gamePaused && gameStarted && !gameOver && (
         <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/70">
@@ -1133,85 +1180,277 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         </div>
       )}
 
-      {/* Aliens - Larger Red Enemy Ships */}
-      {gameStarted && !gameOver && aliens.map((alien) => (
-        <div key={alien.id}>
-          <div
-            className="alien"
-            style={{ left: `${alien.x}%`, top: `${alien.y}%` }}
-            role="img"
-            aria-label={`${alien.type} enemy ship`}
-          >
-            <svg viewBox="0 0 50 50" className="w-full h-full">
-              <defs>
-                <linearGradient id={`alienGradient${alien.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#ef4444" />
-                  <stop offset="50%" stopColor="#dc2626" />
-                  <stop offset="100%" stopColor="#991b1b" />
-                </linearGradient>
-              </defs>
-              {/* Main body - inverted triangle */}
-              <path
-                d="M25 8 L40 35 L25 30 L10 35 Z"
-                fill={`url(#alienGradient${alien.id})`}
-                stroke="#7f1d1d"
-                strokeWidth="2"
-              />
-              {/* Left wing */}
-              <path
-                d="M10 20 L5 25 L10 28 Z"
-                fill="#dc2626"
-                stroke="#991b1b"
-                strokeWidth="1.5"
-              />
-              {/* Right wing */}
-              <path
-                d="M40 20 L45 25 L40 28 Z"
-                fill="#dc2626"
-                stroke="#991b1b"
-                strokeWidth="1.5"
-              />
-              {/* Cockpit */}
-              <circle cx="25" cy="18" r="4" fill="#1f2937" />
-              <circle cx="25" cy="18" r="3" fill="#ef4444" opacity="0.7">
-                <animate attributeName="opacity" values="0.5;0.9;0.5" dur="1s" repeatCount="indefinite" />
-              </circle>
-              {/* Engine exhausts */}
-              <circle cx="18" cy="32" r="2" fill="#fbbf24" opacity="0.8">
-                <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite" />
-              </circle>
-              <circle cx="32" cy="32" r="2" fill="#fbbf24" opacity="0.8">
-                <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite" />
-              </circle>
-            </svg>
-          </div>
+      {/* Aliens - Different designs based on type */}
+      {gameStarted && !gameOver && aliens.map((alien) => {
+        // Render different SVG based on enemy type
+        const renderEnemyShip = () => {
+          switch (alien.type) {
+            case EnemyType.BASIC:
+              // Basic enemy - Red inverted triangle
+              return (
+                <svg viewBox="0 0 50 50" className="w-full h-full">
+                  <defs>
+                    <linearGradient id={`basicGradient${alien.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor="#ef4444" />
+                      <stop offset="50%" stopColor="#dc2626" />
+                      <stop offset="100%" stopColor="#991b1b" />
+                    </linearGradient>
+                  </defs>
+                  <path d="M25 8 L40 35 L25 30 L10 35 Z" fill={`url(#basicGradient${alien.id})`} stroke="#7f1d1d" strokeWidth="2" />
+                  <path d="M10 20 L5 25 L10 28 Z" fill="#dc2626" stroke="#991b1b" strokeWidth="1.5" />
+                  <path d="M40 20 L45 25 L40 28 Z" fill="#dc2626" stroke="#991b1b" strokeWidth="1.5" />
+                  <circle cx="25" cy="18" r="4" fill="#1f2937" />
+                  <circle cx="25" cy="18" r="3" fill="#ef4444" opacity="0.7">
+                    <animate attributeName="opacity" values="0.5;0.9;0.5" dur="1s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="18" cy="32" r="2" fill="#fbbf24" opacity="0.8">
+                    <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="32" cy="32" r="2" fill="#fbbf24" opacity="0.8">
+                    <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite" />
+                  </circle>
+                </svg>
+              );
 
-          {/* Boss Health Bar */}
-          {alien.type === EnemyType.BOSS && (
+            case EnemyType.FAST:
+              // Fast enemy - Sleek orange/yellow design with speed trail
+              return (
+                <svg viewBox="0 0 50 50" className="w-full h-full">
+                  <defs>
+                    <linearGradient id={`fastGradient${alien.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor="#fbbf24" />
+                      <stop offset="50%" stopColor="#f59e0b" />
+                      <stop offset="100%" stopColor="#d97706" />
+                    </linearGradient>
+                  </defs>
+                  {/* Speed trail */}
+                  <ellipse cx="25" cy="35" rx="8" ry="3" fill="#f59e0b" opacity="0.3">
+                    <animate attributeName="opacity" values="0.1;0.4;0.1" dur="0.2s" repeatCount="indefinite" />
+                  </ellipse>
+                  {/* Sleek arrow body */}
+                  <path d="M25 5 L35 30 L25 27 L15 30 Z" fill={`url(#fastGradient${alien.id})`} stroke="#92400e" strokeWidth="1.5" />
+                  {/* Side fins */}
+                  <path d="M15 18 L10 22 L15 24 Z" fill="#f59e0b" stroke="#92400e" strokeWidth="1" />
+                  <path d="M35 18 L40 22 L35 24 Z" fill="#f59e0b" stroke="#92400e" strokeWidth="1" />
+                  {/* Cockpit */}
+                  <circle cx="25" cy="14" r="3" fill="#1f2937" />
+                  <circle cx="25" cy="14" r="2" fill="#fbbf24" opacity="0.9">
+                    <animate attributeName="opacity" values="0.7;1;0.7" dur="0.3s" repeatCount="indefinite" />
+                  </circle>
+                  {/* Engine */}
+                  <circle cx="25" cy="28" r="2.5" fill="#fbbf24" opacity="0.9">
+                    <animate attributeName="opacity" values="0.5;1;0.5" dur="0.15s" repeatCount="indefinite" />
+                  </circle>
+                </svg>
+              );
+
+            case EnemyType.TANK:
+              // Tank enemy - Heavy armored green/gray design
+              return (
+                <svg viewBox="0 0 60 60" className="w-full h-full">
+                  <defs>
+                    <linearGradient id={`tankGradient${alien.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor="#6b7280" />
+                      <stop offset="50%" stopColor="#4b5563" />
+                      <stop offset="100%" stopColor="#374151" />
+                    </linearGradient>
+                  </defs>
+                  {/* Heavy body */}
+                  <rect x="15" y="12" width="30" height="28" rx="3" fill={`url(#tankGradient${alien.id})`} stroke="#1f2937" strokeWidth="2.5" />
+                  {/* Armor plates */}
+                  <rect x="12" y="16" width="6" height="8" fill="#4b5563" stroke="#1f2937" strokeWidth="1.5" />
+                  <rect x="42" y="16" width="6" height="8" fill="#4b5563" stroke="#1f2937" strokeWidth="1.5" />
+                  <rect x="12" y="28" width="6" height="8" fill="#4b5563" stroke="#1f2937" strokeWidth="1.5" />
+                  <rect x="42" y="28" width="6" height="8" fill="#4b5563" stroke="#1f2937" strokeWidth="1.5" />
+                  {/* Turret */}
+                  <rect x="25" y="8" width="10" height="8" fill="#374151" stroke="#1f2937" strokeWidth="1.5" />
+                  {/* Cockpit */}
+                  <circle cx="30" cy="22" r="5" fill="#1f2937" />
+                  <circle cx="30" cy="22" r="3.5" fill="#6b7280" opacity="0.6">
+                    <animate attributeName="opacity" values="0.4;0.7;0.4" dur="1.5s" repeatCount="indefinite" />
+                  </circle>
+                  {/* Engines */}
+                  <circle cx="22" cy="38" r="2.5" fill="#ef4444" opacity="0.7">
+                    <animate attributeName="opacity" values="0.5;0.9;0.5" dur="0.4s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="38" cy="38" r="2.5" fill="#ef4444" opacity="0.7">
+                    <animate attributeName="opacity" values="0.5;0.9;0.5" dur="0.4s" repeatCount="indefinite" />
+                  </circle>
+                </svg>
+              );
+
+            case EnemyType.ZIGZAG:
+              // ZigZag enemy - Angular purple/pink design
+              return (
+                <svg viewBox="0 0 50 50" className="w-full h-full">
+                  <defs>
+                    <linearGradient id={`zigzagGradient${alien.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor="#a855f7" />
+                      <stop offset="50%" stopColor="#9333ea" />
+                      <stop offset="100%" stopColor="#7e22ce" />
+                    </linearGradient>
+                  </defs>
+                  {/* Angular zigzag body */}
+                  <path d="M25 8 L35 18 L40 28 L30 38 L25 32 L20 38 L10 28 L15 18 Z" fill={`url(#zigzagGradient${alien.id})`} stroke="#581c87" strokeWidth="2" />
+                  {/* Side spikes */}
+                  <path d="M10 28 L5 28 L10 30 Z" fill="#9333ea" stroke="#581c87" strokeWidth="1" />
+                  <path d="M40 28 L45 28 L40 30 Z" fill="#9333ea" stroke="#581c87" strokeWidth="1" />
+                  {/* Cockpit */}
+                  <circle cx="25" cy="20" r="4" fill="#1f2937" />
+                  <circle cx="25" cy="20" r="3" fill="#a855f7" opacity="0.8">
+                    <animate attributeName="opacity" values="0.6;1;0.6" dur="0.8s" repeatCount="indefinite" />
+                  </circle>
+                  {/* Engines */}
+                  <circle cx="20" cy="36" r="2" fill="#ec4899" opacity="0.8">
+                    <animate attributeName="opacity" values="0.5;1;0.5" dur="0.3s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="30" cy="36" r="2" fill="#ec4899" opacity="0.8">
+                    <animate attributeName="opacity" values="0.5;1;0.5" dur="0.3s" repeatCount="indefinite" />
+                  </circle>
+                </svg>
+              );
+
+            case EnemyType.SHOOTER:
+              // Shooter enemy - Blue design with visible weapons
+              return (
+                <svg viewBox="0 0 50 50" className="w-full h-full">
+                  <defs>
+                    <linearGradient id={`shooterGradient${alien.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor="#3b82f6" />
+                      <stop offset="50%" stopColor="#2563eb" />
+                      <stop offset="100%" stopColor="#1d4ed8" />
+                    </linearGradient>
+                  </defs>
+                  {/* Main body */}
+                  <path d="M25 10 L35 32 L25 28 L15 32 Z" fill={`url(#shooterGradient${alien.id})`} stroke="#1e40af" strokeWidth="2" />
+                  {/* Weapon pods */}
+                  <rect x="8" y="20" width="4" height="12" rx="1" fill="#1e40af" stroke="#1e3a8a" strokeWidth="1.5" />
+                  <rect x="38" y="20" width="4" height="12" rx="1" fill="#1e40af" stroke="#1e3a8a" strokeWidth="1.5" />
+                  {/* Gun barrels */}
+                  <rect x="9" y="32" width="2" height="6" fill="#ef4444" />
+                  <rect x="39" y="32" width="2" height="6" fill="#ef4444" />
+                  {/* Cockpit */}
+                  <circle cx="25" cy="18" r="4" fill="#1f2937" />
+                  <circle cx="25" cy="18" r="3" fill="#3b82f6" opacity="0.8">
+                    <animate attributeName="opacity" values="0.6;0.9;0.6" dur="1s" repeatCount="indefinite" />
+                  </circle>
+                  {/* Engine */}
+                  <circle cx="25" cy="30" r="2.5" fill="#60a5fa" opacity="0.8">
+                    <animate attributeName="opacity" values="0.5;1;0.5" dur="0.3s" repeatCount="indefinite" />
+                  </circle>
+                  {/* Weapon charge indicators */}
+                  <circle cx="10" cy="26" r="1.5" fill="#fbbf24" opacity="0.9">
+                    <animate attributeName="opacity" values="0.3;1;0.3" dur="0.5s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="40" cy="26" r="1.5" fill="#fbbf24" opacity="0.9">
+                    <animate attributeName="opacity" values="0.3;1;0.3" dur="0.5s" repeatCount="indefinite" />
+                  </circle>
+                </svg>
+              );
+
+            case EnemyType.BOSS:
+              // Boss enemy - Massive intimidating design
+              return (
+                <svg viewBox="0 0 80 80" className="w-full h-full">
+                  <defs>
+                    <linearGradient id={`bossGradient${alien.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor="#dc2626" />
+                      <stop offset="50%" stopColor="#991b1b" />
+                      <stop offset="100%" stopColor="#7f1d1d" />
+                    </linearGradient>
+                    <radialGradient id={`bossGlow${alien.id}`}>
+                      <stop offset="0%" stopColor="#ef4444" stopOpacity="0.8" />
+                      <stop offset="100%" stopColor="#dc2626" stopOpacity="0" />
+                    </radialGradient>
+                  </defs>
+                  {/* Ominous glow */}
+                  <circle cx="40" cy="40" r="38" fill={`url(#bossGlow${alien.id})`} opacity="0.3">
+                    <animate attributeName="r" values="35;40;35" dur="2s" repeatCount="indefinite" />
+                  </circle>
+                  {/* Main hull */}
+                  <ellipse cx="40" cy="35" rx="28" ry="20" fill={`url(#bossGradient${alien.id})`} stroke="#450a0a" strokeWidth="3" />
+                  {/* Command bridge */}
+                  <rect x="30" y="20" width="20" height="12" rx="2" fill="#991b1b" stroke="#450a0a" strokeWidth="2" />
+                  {/* Side cannons */}
+                  <rect x="8" y="28" width="8" height="16" rx="1" fill="#7f1d1d" stroke="#450a0a" strokeWidth="2" />
+                  <rect x="64" y="28" width="8" height="16" rx="1" fill="#7f1d1d" stroke="#450a0a" strokeWidth="2" />
+                  {/* Gun barrels */}
+                  <rect x="6" y="44" width="4" height="10" fill="#374151" stroke="#1f2937" strokeWidth="1" />
+                  <rect x="70" y="44" width="4" height="10" fill="#374151" stroke="#1f2937" strokeWidth="1" />
+                  {/* Wings */}
+                  <path d="M12 35 L5 30 L5 40 Z" fill="#991b1b" stroke="#450a0a" strokeWidth="2" />
+                  <path d="M68 35 L75 30 L75 40 Z" fill="#991b1b" stroke="#450a0a" strokeWidth="2" />
+                  {/* Cockpit */}
+                  <circle cx="40" cy="26" r="6" fill="#1f2937" />
+                  <circle cx="40" cy="26" r="4.5" fill="#ef4444" opacity="0.9">
+                    <animate attributeName="opacity" values="0.6;1;0.6" dur="1.2s" repeatCount="indefinite" />
+                  </circle>
+                  {/* Engine cores */}
+                  <circle cx="28" cy="50" r="4" fill="#fbbf24" opacity="0.9">
+                    <animate attributeName="opacity" values="0.6;1;0.6" dur="0.4s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="40" cy="52" r="4" fill="#fbbf24" opacity="0.9">
+                    <animate attributeName="opacity" values="0.6;1;0.6" dur="0.4s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="52" cy="50" r="4" fill="#fbbf24" opacity="0.9">
+                    <animate attributeName="opacity" values="0.6;1;0.6" dur="0.4s" repeatCount="indefinite" />
+                  </circle>
+                  {/* Armor plating details */}
+                  <rect x="25" y="32" width="5" height="6" fill="#7f1d1d" opacity="0.5" />
+                  <rect x="50" y="32" width="5" height="6" fill="#7f1d1d" opacity="0.5" />
+                  {/* Weapon charge lights */}
+                  <circle cx="10" cy="36" r="2" fill="#22d3ee" opacity="0.9">
+                    <animate attributeName="opacity" values="0.4;1;0.4" dur="0.6s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="70" cy="36" r="2" fill="#22d3ee" opacity="0.9">
+                    <animate attributeName="opacity" values="0.4;1;0.4" dur="0.6s" repeatCount="indefinite" />
+                  </circle>
+                </svg>
+              );
+
+            default:
+              return null;
+          }
+        };
+
+        return (
+          <div key={alien.id}>
             <div
-              className="absolute z-10"
-              style={{
-                left: `${alien.x}%`,
-                top: `${alien.y - 5}%`,
-                transform: 'translateX(-50%)',
-                width: '100px'
-              }}
+              className="alien"
+              style={{ left: `${alien.x}%`, top: `${alien.y}%` }}
+              role="img"
+              aria-label={`${alien.type} enemy ship`}
             >
-              <div className="bg-red-900 border-2 border-red-500 h-3 relative">
-                <div
-                  className="bg-red-500 h-full transition-all duration-200"
-                  style={{ width: `${(alien.health / alien.maxHealth) * 100}%` }}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse"></div>
+              {renderEnemyShip()}
+            </div>
+
+            {/* Boss Health Bar */}
+            {alien.type === EnemyType.BOSS && (
+              <div
+                className="absolute z-10"
+                style={{
+                  left: `${alien.x}%`,
+                  top: `${alien.y - 5}%`,
+                  transform: 'translateX(-50%)',
+                  width: '100px'
+                }}
+              >
+                <div className="bg-red-900 border-2 border-red-500 h-3 relative">
+                  <div
+                    className="bg-red-500 h-full transition-all duration-200"
+                    style={{ width: `${(alien.health / alien.maxHealth) * 100}%` }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse"></div>
+                  </div>
+                </div>
+                <div className="text-center text-white font-mono text-xs mt-1 font-bold drop-shadow-[0_0_3px_rgba(0,0,0,1)]">
+                  BOSS: {alien.health}/{alien.maxHealth}
                 </div>
               </div>
-              <div className="text-center text-white font-mono text-xs mt-1 font-bold drop-shadow-[0_0_3px_rgba(0,0,0,1)]">
-                BOSS: {alien.health}/{alien.maxHealth}
-              </div>
-            </div>
-          )}
-        </div>
-      ))}
+            )}
+          </div>
+        );
+      })}
 
       {/* Bullets - Small Red Lasers */}
       {gameStarted && !gameOver && bullets.map((bullet) => (
