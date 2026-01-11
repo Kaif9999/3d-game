@@ -5,7 +5,7 @@ export const GAME_LOOP_FPS = 60;
 export const GAME_LOOP_INTERVAL = 1000 / GAME_LOOP_FPS; // ~16.67ms for 60 FPS
 
 // Player Settings
-export const INITIAL_LIVES = 3;
+export const INITIAL_LIVES = 5;
 export const PLAYER_SPEED = 1.5; // % per frame
 export const PLAYER_SPEED_BOOST = 2.5; // % per frame with power-up
 export const PLAYER_SIZE = 6; // % of screen
@@ -20,7 +20,7 @@ export const BULLET_HEIGHT = 1.2; // %
 export const BULLET_DAMAGE = 1;
 
 // Enemy Settings
-export const ENEMY_BULLET_SPEED = 1.5; // % per frame
+export const ENEMY_BULLET_SPEED = 1; // % per frame
 export const ENEMY_SHOOT_INTERVAL = 2000; // ms
 
 // Enemy Sizes (% of screen)
@@ -48,8 +48,8 @@ export const SCORE_SHOOTER = 250;
 export const SCORE_BOSS = 5000;
 
 // Power-up Settings
-export const POWERUP_DURATION = 10000; // ms (10 seconds)
-export const POWERUP_SPAWN_CHANCE = 0.2; // 20%
+export const POWERUP_DURATION = 15000; // ms (15 seconds)
+export const POWERUP_SPAWN_CHANCE = 0.3; // 30%
 export const POWERUP_SPEED = 1; // % per frame
 export const POWERUP_COLLECTION_DISTANCE = 4; // %
 
