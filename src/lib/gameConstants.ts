@@ -92,3 +92,18 @@ export const PLAYER_COLLISION_DISTANCE = 4; // distance in %
 
 // Wave System
 export const WAVE_CLEAR_THRESHOLD = 0; // Score must be > 0 to advance
+
+// Level System
+export const TOTAL_LEVELS = 10;
+export const LEVEL_CONFIGS = [
+  { level: 1, enemies: 10, types: ['basic'], spawnDelay: 2000, description: 'Basic Training' },
+  { level: 2, enemies: 15, types: ['basic', 'fast'], spawnDelay: 1800, description: 'Speed Challenge' },
+  { level: 3, enemies: 20, types: ['basic', 'tank'], spawnDelay: 1600, description: 'Heavy Resistance' },
+  { level: 4, enemies: 25, types: ['basic', 'zigzag'], spawnDelay: 1400, description: 'Evasive Maneuvers' },
+  { level: 5, enemies: 30, types: ['basic', 'shooter'], spawnDelay: 1200, description: 'Under Fire' },
+  { level: 6, enemies: 35, types: ['fast', 'zigzag'], spawnDelay: 1000, description: 'Chaos Mode' },
+  { level: 7, enemies: 40, types: ['tank', 'shooter'], spawnDelay: 900, description: 'Heavy Artillery' },
+  { level: 8, enemies: 45, types: ['fast', 'shooter', 'zigzag'], spawnDelay: 800, description: 'Elite Forces' },
+  { level: 9, enemies: 50, types: ['basic', 'fast', 'tank', 'zigzag', 'shooter'], spawnDelay: 700, description: 'Final Assault' },
+  { level: 10, enemies: 1, types: ['boss'], spawnDelay: 5000, description: 'Boss Battle' }
+];
