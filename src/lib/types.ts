@@ -91,3 +91,10 @@ export interface ActivePowerUps {
   scoreMultiplier: number;
   extraLife: number;
 }
+
+export interface LeaderboardEntry {
+  name: string;
+  score: number;
+  level: number;
+  timestamp: number;
+}
