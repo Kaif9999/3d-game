@@ -92,3 +92,11 @@ export const PLAYER_COLLISION_DISTANCE = 4; // distance in %
 
 // Wave System
 export const WAVE_CLEAR_THRESHOLD = 0; // Score must be > 0 to advance
+
+// Level System
+export const TOTAL_LEVELS = 10;
+export const LEVEL_COMPLETE_DELAY = 2000; // ms before advancing to next level
+
+// Leaderboard
+export const LEADERBOARD_STORAGE_KEY = 'spaceShooterLeaderboard';
+export const MAX_LEADERBOARD_ENTRIES = 10;
