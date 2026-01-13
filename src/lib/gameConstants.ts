@@ -92,3 +92,18 @@ export const PLAYER_COLLISION_DISTANCE = 4; // distance in %
 
 // Wave System
 export const WAVE_CLEAR_THRESHOLD = 0; // Score must be > 0 to advance
+
+// Level System
+export const TOTAL_LEVELS = 10;
+export const ENEMIES_TO_COMPLETE_LEVEL = {
+  1: 10,
+  2: 15,
+  3: 20,
+  4: 25,
+  5: 30,
+  6: 35,
+  7: 40,
+  8: 45,
+  9: 50,
+  10: 1 // Boss level
+};
