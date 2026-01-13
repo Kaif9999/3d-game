@@ -2,12 +2,45 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import audioManager from '@/utils/audioManager';
 import * as CONSTANTS from '@/lib/gameConstants';
-import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps } from '@/lib/types';
+import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps, type LeaderboardEntry } from '@/lib/types';
 import { powerUpTypeToStateKey, getPowerUpDisplayName, getPowerUpColor } from '@/lib/powerUpUtils';
+
+// Leaderboard functions
+const getLeaderboard = (): LeaderboardEntry[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const data = localStorage.getItem('spaceShooterLeaderboard');
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.warn('Failed to load leaderboard:', error);
+    return [];
+  }
+};
+
+const saveToLeaderboard = (name: string, score: number, level: number) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const leaderboard = getLeaderboard();
+    leaderboard.push({
+      name,
+      score,
+      level,
+      date: new Date().toISOString()
+    });
+    leaderboard.sort((a, b) => b.score - a.score);
+    const top10 = leaderboard.slice(0, 10);
+    localStorage.setItem('spaceShooterLeaderboard', JSON.stringify(top10));
+  } catch (error) {
+    console.warn('Failed to save to leaderboard:', error);
+  }
+};
 
 interface SpaceShooterGameProps {}
 
 export default function SpaceShooterGame(props: SpaceShooterGameProps) {
+  const [showNameEntry, setShowNameEntry] = useState(false);
+  const [playerName, setPlayerName] = useState('');
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [gamePaused, setGamePaused] = useState(false);
@@ -178,13 +211,33 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       case EnemyType.FAST:
         return { health: 1, speed: 0.8, points: 150 };
       case EnemyType.TANK:
-        return { health: 1, speed: 0.2, points: 300 }; // Changed to 1 health
+        return { health: 1, speed: 0.2, points: 300 };
       case EnemyType.ZIGZAG:
-        return { health: 1, speed: 0.4, points: 200 }; // Changed to 1 health
+        return { health: 1, speed: 0.4, points: 200 };
       case EnemyType.SHOOTER:
-        return { health: 1, speed: 0.3, points: 250 }; // Changed to 1 health
+        return { health: 1, speed: 0.3, points: 250 };
       case EnemyType.BOSS:
-        return { health: 20, speed: 0.15, points: 5000 }; // Boss still has multiple health
+        return { health: 20, speed: 0.15, points: 5000 };
+      case EnemyType.LEVEL1:
+        return { health: 1, speed: 0.5, points: 100, color: '#22d3ee' }; // Cyan Scout
+      case EnemyType.LEVEL2:
+        return { health: 1, speed: 0.7, points: 150, color: '#fbbf24' }; // Yellow Interceptor
+      case EnemyType.LEVEL3:
+        return { health: 1, speed: 0.4, points: 200, color: '#a78bfa' }; // Purple Cruiser
+      case EnemyType.LEVEL4:
+        return { health: 1, speed: 0.6, points: 250, color: '#fb923c' }; // Orange Striker
+      case EnemyType.LEVEL5:
+        return { health: 1, speed: 0.5, points: 300, color: '#4ade80' }; // Green Phantom
+      case EnemyType.LEVEL6:
+        return { health: 1, speed: 0.8, points: 350, color: '#f472b6' }; // Pink Raider
+      case EnemyType.LEVEL7:
+        return { health: 1, speed: 0.4, points: 400, color: '#38bdf8' }; // Blue Destroyer
+      case EnemyType.LEVEL8:
+        return { health: 1, speed: 0.6, points: 450, color: '#facc15' }; // Gold Vanguard
+      case EnemyType.LEVEL9:
+        return { health: 1, speed: 0.7, points: 500, color: '#c084fc' }; // Violet Elite
+      case EnemyType.LEVEL10_BOSS:
+        return { health: 50, speed: 0.2, points: 10000, color: '#ef4444' }; // Red Final Boss
       default:
         return { health: 1, speed: 0.4, points: 100 };
     }

@@ -7,7 +7,17 @@ export enum EnemyType {
   TANK = 'tank',
   ZIGZAG = 'zigzag',
   SHOOTER = 'shooter',
-  BOSS = 'boss'
+  BOSS = 'boss',
+  LEVEL1 = 'level1',
+  LEVEL2 = 'level2',
+  LEVEL3 = 'level3',
+  LEVEL4 = 'level4',
+  LEVEL5 = 'level5',
+  LEVEL6 = 'level6',
+  LEVEL7 = 'level7',
+  LEVEL8 = 'level8',
+  LEVEL9 = 'level9',
+  LEVEL10_BOSS = 'level10_boss'
 }
 
 // Power-up types
@@ -90,4 +100,11 @@ export interface ActivePowerUps {
   timeSlow: number;
   scoreMultiplier: number;
   extraLife: number;
+}
+
+export interface LeaderboardEntry {
+  name: string;
+  score: number;
+  level: number;
+  date: string;
 }
