@@ -7,7 +7,17 @@ export enum EnemyType {
   TANK = 'tank',
   ZIGZAG = 'zigzag',
   SHOOTER = 'shooter',
-  BOSS = 'boss'
+  BOSS = 'boss',
+  LEVEL1 = 'level1',
+  LEVEL2 = 'level2',
+  LEVEL3 = 'level3',
+  LEVEL4 = 'level4',
+  LEVEL5 = 'level5',
+  LEVEL6 = 'level6',
+  LEVEL7 = 'level7',
+  LEVEL8 = 'level8',
+  LEVEL9 = 'level9',
+  LEVEL10 = 'level10'
 }
 
 // Power-up types
@@ -32,6 +42,7 @@ export interface Alien {
   type: EnemyType;
   health: number;
   maxHealth: number;
+  level: number;
   zigzagPhase?: number;
   lastShot?: number;
 }
