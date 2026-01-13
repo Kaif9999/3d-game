@@ -44,6 +44,8 @@ export interface Bullet {
   damage?: number;
   isHoming?: boolean;
   targetId?: number;
+  vx?: number;
+  vy?: number;
 }
 
 export interface PowerUp {
