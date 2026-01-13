@@ -46,7 +46,19 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [scoreMultiplier, setScoreMultiplier] = useState(1);
   const [timeSlowActive, setTimeSlowActive] = useState(false);
   const [wave, setWave] = useState(1);
-  
+  const [playerName, setPlayerName] = useState('');
+  const [leaderboard, setLeaderboard] = useState<Array<{name: string, score: number, date: string}>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return JSON.parse(localStorage.getItem('spaceShooterLeaderboard') || '[]');
+      } catch (error) {
+        console.warn('Failed to load leaderboard from localStorage:', error);
+        return [];
+      }
+    }
+    return [];
+  });
+
   // Power-up states
   const [activePowerUps, setActivePowerUps] = useState<ActivePowerUps>({
     doubleShot: 0,
@@ -190,19 +202,19 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     }
   };
 
-  // Level configuration
+  // Level configuration - 10 distinct levels
   const getLevelConfig = (level: number) => {
     const configs = [
-      { enemies: 10, types: [EnemyType.BASIC], spawnDelay: 2000, description: "Basic Training" },
-      { enemies: 15, types: [EnemyType.BASIC, EnemyType.FAST], spawnDelay: 1800, description: "Speed Challenge" },
-      { enemies: 20, types: [EnemyType.BASIC, EnemyType.TANK], spawnDelay: 1600, description: "Heavy Resistance" },
-      { enemies: 25, types: [EnemyType.BASIC, EnemyType.ZIGZAG], spawnDelay: 1400, description: "Evasive Maneuvers" },
-      { enemies: 30, types: [EnemyType.BASIC, EnemyType.SHOOTER], spawnDelay: 1200, description: "Under Fire" },
-      { enemies: 35, types: [EnemyType.FAST, EnemyType.ZIGZAG], spawnDelay: 1000, description: "Chaos Mode" },
-      { enemies: 40, types: [EnemyType.TANK, EnemyType.SHOOTER], spawnDelay: 900, description: "Heavy Artillery" },
-      { enemies: 45, types: [EnemyType.FAST, EnemyType.SHOOTER, EnemyType.ZIGZAG], spawnDelay: 800, description: "Elite Forces" },
-      { enemies: 50, types: [EnemyType.BASIC, EnemyType.FAST, EnemyType.TANK, EnemyType.ZIGZAG, EnemyType.SHOOTER], spawnDelay: 700, description: "Final Assault" },
-      { enemies: 1, types: [EnemyType.BOSS], spawnDelay: 5000, description: "Boss Battle" }
+      { enemies: 8, types: [EnemyType.BASIC], spawnDelay: 2000, description: "Basic Training", enemyColor: "#ef4444" },
+      { enemies: 12, types: [EnemyType.BASIC, EnemyType.FAST], spawnDelay: 1800, description: "Speed Challenge", enemyColor: "#f97316" },
+      { enemies: 15, types: [EnemyType.BASIC, EnemyType.TANK], spawnDelay: 1600, description: "Heavy Resistance", enemyColor: "#eab308" },
+      { enemies: 18, types: [EnemyType.BASIC, EnemyType.ZIGZAG], spawnDelay: 1400, description: "Evasive Maneuvers", enemyColor: "#22c55e" },
+      { enemies: 20, types: [EnemyType.BASIC, EnemyType.SHOOTER], spawnDelay: 1200, description: "Under Fire", enemyColor: "#06b6d4" },
+      { enemies: 25, types: [EnemyType.FAST, EnemyType.ZIGZAG], spawnDelay: 1000, description: "Chaos Mode", enemyColor: "#8b5cf6" },
+      { enemies: 28, types: [EnemyType.TANK, EnemyType.SHOOTER], spawnDelay: 900, description: "Heavy Artillery", enemyColor: "#ec4899" },
+      { enemies: 32, types: [EnemyType.FAST, EnemyType.SHOOTER, EnemyType.ZIGZAG], spawnDelay: 800, description: "Elite Forces", enemyColor: "#f59e0b" },
+      { enemies: 35, types: [EnemyType.BASIC, EnemyType.FAST, EnemyType.TANK, EnemyType.ZIGZAG, EnemyType.SHOOTER], spawnDelay: 700, description: "Final Assault", enemyColor: "#dc2626" },
+      { enemies: 1, types: [EnemyType.BOSS], spawnDelay: 5000, description: "Boss Battle", enemyColor: "#7c2d12" }
     ];
     return configs[Math.min(level - 1, configs.length - 1)];
   };
@@ -461,10 +473,11 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
 
               const points = stats.points * (1 + combo * CONSTANTS.COMBO_SCORE_BONUS) * scoreMultiplier;
               setScore(prev => prev + Math.floor(points));
-              
+              setEnemiesKilledInLevel(prev => prev + 1);
+
               // Spawn power-up chance
               spawnPowerUp(alien.x, alien.y);
-              
+
               // Create explosion with particles
               newExplosions.push({
                 id: explosionIdCounter.current++,
@@ -472,12 +485,12 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
                 y: alien.y,
               });
               createParticles(alien.x, alien.y, 8, '#ff6b6b');
-              
+
               // Screen shake for boss
               if (alien.type === EnemyType.BOSS) {
                 triggerScreenShake(10);
               }
-              
+
               safeAudioCall(() => audioManager.playSound('laserHit'));
             } else {
               aliensToUpdate.set(alien.id, { ...alien, health: newHealth });
@@ -653,12 +666,24 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               setGameStarted(false);
               audioManager.stopBackgroundMusic();
               audioManager.playSound('gameOver');
-              
+
               // Update high score
               if (score > highScore) {
                 setHighScore(score);
                 localStorage.setItem('spaceShooterHighScore', score.toString());
               }
+
+              // Add to leaderboard
+              const newEntry = {
+                name: playerName,
+                score: score,
+                date: new Date().toISOString().split('T')[0] // YYYY-MM-DD format
+              };
+              const updatedLeaderboard = [...leaderboard, newEntry]
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 10); // Keep top 10
+              setLeaderboard(updatedLeaderboard);
+              localStorage.setItem('spaceShooterLeaderboard', JSON.stringify(updatedLeaderboard));
             }
             return newLives;
           });
@@ -675,42 +700,30 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       
       checkPlayerCollisions();
 
-      // Spawn new aliens based on wave
+      // Spawn new aliens based on level
       const now = Date.now();
-      const spawnDelay = Math.max(500, 2000 - wave * 100);
-      
-      if (now - lastAlienSpawnRef.current > spawnDelay) {
+      const levelConfig = getLevelConfig(level);
+      const spawnDelay = levelComplete ? 10000 : levelConfig.spawnDelay; // Long delay when level complete
+
+      if (now - lastAlienSpawnRef.current > spawnDelay && !levelComplete) {
         lastAlienSpawnRef.current = now;
-        
-        // Determine enemy type based on wave
-        let type = EnemyType.BASIC;
-        const rand = Math.random();
-        
-        if (wave % 5 === 0 && currentAliens.filter(a => a.type === EnemyType.BOSS).length === 0) {
-          // Boss every 5 waves
-          type = EnemyType.BOSS;
-        } else if (wave >= 2 && rand < 0.2) {
-          type = EnemyType.FAST;
-        } else if (wave >= 3 && rand < 0.15) {
-          type = EnemyType.TANK;
-        } else if (wave >= 4 && rand < 0.15) {
-          type = EnemyType.ZIGZAG;
-        } else if (wave >= 5 && rand < 0.1) {
-          type = EnemyType.SHOOTER;
-        }
-        
+
+        // Determine enemy type based on level config
+        const availableTypes = levelConfig.types;
+        const type = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+
         const stats = getEnemyStats(type);
         const newAlien: Alien = {
           id: alienIdCounter.current++,
           x: type === EnemyType.BOSS ? 50 : Math.random() * 80 + 10,
           y: -5,
           type,
-          speed: stats.speed + wave * 0.02,
+          speed: stats.speed + level * 0.02,
           health: stats.health,
           maxHealth: stats.health,
           zigzagPhase: type === EnemyType.ZIGZAG ? Math.random() * Math.PI * 2 : undefined
         };
-        
+
         setAliens(prev => [...prev, newAlien]);
       }
       
@@ -731,12 +744,18 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   }, [gameStarted, gameOver, gamePaused, score, playerX, wave, combo, highScore, activePowerUps, lastKillTime]);
 
   const startGame = async () => {
+    if (!playerName.trim()) {
+      alert('Please enter your name to start the game!');
+      return;
+    }
+
     // Initialize audio on user interaction
     await audioManager.initializeOnUserInteraction();
 
     setGameStarted(true);
     setGameOver(false);
     setGamePaused(false);
+    setGameWon(false);
     setScore(0);
     setLives(CONSTANTS.INITIAL_LIVES);
     setPlayerX(CONSTANTS.PLAYER_START_X);
@@ -745,7 +764,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setPowerUps([]);
     setExplosions([]);
     setParticles([]);
-    setWave(1);
+    setLevel(1);
+    setEnemiesKilledInLevel(0);
+    setLevelComplete(false);
     setCombo(0);
     setLastKillTime(0);
     setScreenShake(0);
@@ -799,7 +820,10 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setPowerUps([]);
     setExplosions([]);
     setParticles([]);
-    setWave(1);
+    setLevel(1);
+    setEnemiesKilledInLevel(0);
+    setLevelComplete(false);
+    setGameWon(false);
     setCombo(0);
     setLastKillTime(0);
     setScreenShake(0);
