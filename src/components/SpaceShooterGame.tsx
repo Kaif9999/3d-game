@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import audioManager from '@/utils/audioManager';
 import * as CONSTANTS from '@/lib/gameConstants';
-import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps } from '@/lib/types';
+import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps, type LeaderboardEntry } from '@/lib/types';
 import { powerUpTypeToStateKey, getPowerUpDisplayName, getPowerUpColor } from '@/lib/powerUpUtils';
 
 interface SpaceShooterGameProps {}
@@ -11,6 +11,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [gameStarted, setGameStarted] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [gamePaused, setGamePaused] = useState(false);
+  const [showNameInput, setShowNameInput] = useState(false);
+  const [playerName, setPlayerName] = useState('');
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -172,37 +175,105 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     }
   };
 
+  // Helper function to get enemy colors
+  const getEnemyColors = (type: EnemyType) => {
+    switch (type) {
+      case EnemyType.BASIC:
+        return { primary: '#ef4444', secondary: '#dc2626', tertiary: '#991b1b' };
+      case EnemyType.FAST:
+        return { primary: '#f59e0b', secondary: '#d97706', tertiary: '#b45309' };
+      case EnemyType.TANK:
+        return { primary: '#6b7280', secondary: '#4b5563', tertiary: '#374151' };
+      case EnemyType.ZIGZAG:
+        return { primary: '#8b5cf6', secondary: '#7c3aed', tertiary: '#6d28d9' };
+      case EnemyType.SHOOTER:
+        return { primary: '#ec4899', secondary: '#db2777', tertiary: '#be185d' };
+      case EnemyType.STEALTH:
+        return { primary: '#14b8a6', secondary: '#0d9488', tertiary: '#0f766e' };
+      case EnemyType.SHIELD:
+        return { primary: '#3b82f6', secondary: '#2563eb', tertiary: '#1d4ed8' };
+      case EnemyType.BOMBER:
+        return { primary: '#eab308', secondary: '#ca8a04', tertiary: '#a16207' };
+      case EnemyType.SWARM:
+        return { primary: '#10b981', secondary: '#059669', tertiary: '#047857' };
+      case EnemyType.ELITE:
+        return { primary: '#a855f7', secondary: '#9333ea', tertiary: '#7e22ce' };
+      case EnemyType.BOSS:
+        return { primary: '#dc2626', secondary: '#991b1b', tertiary: '#7f1d1d' };
+      default:
+        return { primary: '#ef4444', secondary: '#dc2626', tertiary: '#991b1b' };
+    }
+  };
+
   // Helper function to get enemy stats
   const getEnemyStats = (type: EnemyType) => {
     switch (type) {
+      case EnemyType.BASIC:
+        return { health: 1, speed: 0.4, points: 100 };
       case EnemyType.FAST:
         return { health: 1, speed: 0.8, points: 150 };
       case EnemyType.TANK:
-        return { health: 1, speed: 0.2, points: 300 }; // Changed to 1 health
+        return { health: 1, speed: 0.2, points: 300 };
       case EnemyType.ZIGZAG:
-        return { health: 1, speed: 0.4, points: 200 }; // Changed to 1 health
+        return { health: 1, speed: 0.4, points: 200 };
       case EnemyType.SHOOTER:
-        return { health: 1, speed: 0.3, points: 250 }; // Changed to 1 health
+        return { health: 1, speed: 0.3, points: 250 };
+      case EnemyType.STEALTH:
+        return { health: 1, speed: 0.6, points: 400 };
+      case EnemyType.SHIELD:
+        return { health: 2, speed: 0.3, points: 500 };
+      case EnemyType.BOMBER:
+        return { health: 1, speed: 0.35, points: 350 };
+      case EnemyType.SWARM:
+        return { health: 1, speed: 0.7, points: 180 };
+      case EnemyType.ELITE:
+        return { health: 3, speed: 0.5, points: 800 };
       case EnemyType.BOSS:
-        return { health: 20, speed: 0.15, points: 5000 }; // Boss still has multiple health
+        return { health: 30, speed: 0.15, points: 10000 };
       default:
         return { health: 1, speed: 0.4, points: 100 };
     }
   };
 
-  // Level configuration
+  // Leaderboard functions
+  const getLeaderboard = (): LeaderboardEntry[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('spaceShooterLeaderboard');
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.warn('Failed to load leaderboard:', error);
+      return [];
+    }
+  };
+
+  const saveToLeaderboard = (name: string, score: number, level: number) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const leaderboard = getLeaderboard();
+      leaderboard.push({ name, score, level, date: Date.now() });
+      leaderboard.sort((a, b) => b.score - a.score);
+      const top10 = leaderboard.slice(0, 10);
+      localStorage.setItem('spaceShooterLeaderboard', JSON.stringify(top10));
+    } catch (error) {
+      console.warn('Failed to save to leaderboard:', error);
+    }
+  };
+
+  // Level configuration - 10 levels + 1 boss level
   const getLevelConfig = (level: number) => {
     const configs = [
-      { enemies: 10, types: [EnemyType.BASIC], spawnDelay: 2000, description: "Basic Training" },
-      { enemies: 15, types: [EnemyType.BASIC, EnemyType.FAST], spawnDelay: 1800, description: "Speed Challenge" },
-      { enemies: 20, types: [EnemyType.BASIC, EnemyType.TANK], spawnDelay: 1600, description: "Heavy Resistance" },
-      { enemies: 25, types: [EnemyType.BASIC, EnemyType.ZIGZAG], spawnDelay: 1400, description: "Evasive Maneuvers" },
-      { enemies: 30, types: [EnemyType.BASIC, EnemyType.SHOOTER], spawnDelay: 1200, description: "Under Fire" },
-      { enemies: 35, types: [EnemyType.FAST, EnemyType.ZIGZAG], spawnDelay: 1000, description: "Chaos Mode" },
-      { enemies: 40, types: [EnemyType.TANK, EnemyType.SHOOTER], spawnDelay: 900, description: "Heavy Artillery" },
-      { enemies: 45, types: [EnemyType.FAST, EnemyType.SHOOTER, EnemyType.ZIGZAG], spawnDelay: 800, description: "Elite Forces" },
-      { enemies: 50, types: [EnemyType.BASIC, EnemyType.FAST, EnemyType.TANK, EnemyType.ZIGZAG, EnemyType.SHOOTER], spawnDelay: 700, description: "Final Assault" },
-      { enemies: 1, types: [EnemyType.BOSS], spawnDelay: 5000, description: "Boss Battle" }
+      { enemies: 10, types: [EnemyType.BASIC], spawnDelay: 2000, description: "Level 1: Basic Training" },
+      { enemies: 15, types: [EnemyType.BASIC, EnemyType.FAST], spawnDelay: 1800, description: "Level 2: Speed Demons" },
+      { enemies: 20, types: [EnemyType.TANK, EnemyType.FAST], spawnDelay: 1600, description: "Level 3: Heavy Assault" },
+      { enemies: 25, types: [EnemyType.ZIGZAG, EnemyType.BASIC], spawnDelay: 1400, description: "Level 4: Evasive Action" },
+      { enemies: 30, types: [EnemyType.SHOOTER, EnemyType.ZIGZAG], spawnDelay: 1200, description: "Level 5: Under Fire" },
+      { enemies: 35, types: [EnemyType.STEALTH, EnemyType.FAST], spawnDelay: 1000, description: "Level 6: Shadow Fleet" },
+      { enemies: 40, types: [EnemyType.SHIELD, EnemyType.SHOOTER], spawnDelay: 900, description: "Level 7: Fortified Defenses" },
+      { enemies: 45, types: [EnemyType.BOMBER, EnemyType.TANK], spawnDelay: 800, description: "Level 8: Explosive Chaos" },
+      { enemies: 50, types: [EnemyType.SWARM, EnemyType.STEALTH], spawnDelay: 700, description: "Level 9: Swarm Invasion" },
+      { enemies: 55, types: [EnemyType.ELITE, EnemyType.SHIELD], spawnDelay: 600, description: "Level 10: Elite Squadron" },
+      { enemies: 1, types: [EnemyType.BOSS], spawnDelay: 0, description: "BOSS: Final Showdown" }
     ];
     return configs[Math.min(level - 1, configs.length - 1)];
   };
@@ -427,8 +498,15 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           // Skip if already marked for removal or wrong bullet type
           if (aliensToRemove.has(alien.id) || bulletsToRemove.has(bullet.id) || !bullet.isPlayerBullet) return;
 
-          // Adjusted hitboxes
-          const alienSize = alien.type === EnemyType.BOSS ? 5 : alien.type === EnemyType.TANK ? 3 : 2.5;
+          // Adjusted hitboxes based on enemy type
+          const getAlienSize = (type: EnemyType) => {
+            if (type === EnemyType.BOSS) return 5;
+            if (type === EnemyType.TANK) return 3;
+            if (type === EnemyType.ELITE) return 3.5;
+            if (type === EnemyType.SWARM) return 2;
+            return 2.5;
+          };
+          const alienSize = getAlienSize(alien.type);
           const alienLeft = alien.x - alienSize;
           const alienRight = alien.x + alienSize;
           const alienTop = alien.y - alienSize;
@@ -449,7 +527,10 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
             if (newHealth <= 0) {
               aliensToRemove.add(alien.id);
               const stats = getEnemyStats(alien.type);
-              
+
+              // Increment enemies killed counter
+              setEnemiesKilledInLevel(prev => prev + 1);
+
               // Update score with combo
               const now = Date.now();
               if (now - lastKillTime < 1000) {
@@ -461,10 +542,10 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
 
               const points = stats.points * (1 + combo * CONSTANTS.COMBO_SCORE_BONUS) * scoreMultiplier;
               setScore(prev => prev + Math.floor(points));
-              
+
               // Spawn power-up chance
               spawnPowerUp(alien.x, alien.y);
-              
+
               // Create explosion with particles
               newExplosions.push({
                 id: explosionIdCounter.current++,
@@ -472,12 +553,12 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
                 y: alien.y,
               });
               createParticles(alien.x, alien.y, 8, '#ff6b6b');
-              
+
               // Screen shake for boss
               if (alien.type === EnemyType.BOSS) {
                 triggerScreenShake(10);
               }
-              
+
               safeAudioCall(() => audioManager.playSound('laserHit'));
             } else {
               aliensToUpdate.set(alien.id, { ...alien, health: newHealth });
@@ -605,7 +686,14 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         
         // Check alien collisions
         currentAliens.forEach(alien => {
-          const alienSize = alien.type === EnemyType.BOSS ? 5 : alien.type === EnemyType.TANK ? 3 : 2.5;
+          const getAlienSize = (type: EnemyType) => {
+            if (type === EnemyType.BOSS) return 5;
+            if (type === EnemyType.TANK) return 3;
+            if (type === EnemyType.ELITE) return 3.5;
+            if (type === EnemyType.SWARM) return 2;
+            return 2.5;
+          };
+          const alienSize = getAlienSize(alien.type);
           const alienLeft = alien.x - alienSize;
           const alienRight = alien.x + alienSize;
           const alienTop = alien.y - alienSize;
@@ -653,11 +741,16 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               setGameStarted(false);
               audioManager.stopBackgroundMusic();
               audioManager.playSound('gameOver');
-              
+
               // Update high score
               if (score > highScore) {
                 setHighScore(score);
                 localStorage.setItem('spaceShooterHighScore', score.toString());
+              }
+
+              // Save to leaderboard if player has a name
+              if (playerName) {
+                saveToLeaderboard(playerName, score, level);
               }
             }
             return newLives;
@@ -675,49 +768,63 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       
       checkPlayerCollisions();
 
-      // Spawn new aliens based on wave
+      // Spawn new aliens based on level
       const now = Date.now();
-      const spawnDelay = Math.max(500, 2000 - wave * 100);
-      
-      if (now - lastAlienSpawnRef.current > spawnDelay) {
-        lastAlienSpawnRef.current = now;
-        
-        // Determine enemy type based on wave
-        let type = EnemyType.BASIC;
-        const rand = Math.random();
-        
-        if (wave % 5 === 0 && currentAliens.filter(a => a.type === EnemyType.BOSS).length === 0) {
-          // Boss every 5 waves
-          type = EnemyType.BOSS;
-        } else if (wave >= 2 && rand < 0.2) {
-          type = EnemyType.FAST;
-        } else if (wave >= 3 && rand < 0.15) {
-          type = EnemyType.TANK;
-        } else if (wave >= 4 && rand < 0.15) {
-          type = EnemyType.ZIGZAG;
-        } else if (wave >= 5 && rand < 0.1) {
-          type = EnemyType.SHOOTER;
+      const levelConfig = getLevelConfig(level);
+
+      if (enemiesKilledInLevel < levelConfig.enemies) {
+        const spawnDelay = levelConfig.spawnDelay;
+
+        if (now - lastAlienSpawnRef.current > spawnDelay && currentAliens.length < 10) {
+          lastAlienSpawnRef.current = now;
+
+          // Select enemy type from level config
+          const types = levelConfig.types;
+          const type = types[Math.floor(Math.random() * types.length)];
+
+          const stats = getEnemyStats(type);
+          const newAlien: Alien = {
+            id: alienIdCounter.current++,
+            x: type === EnemyType.BOSS ? 50 : Math.random() * 80 + 10,
+            y: -5,
+            type,
+            speed: stats.speed,
+            health: stats.health,
+            maxHealth: stats.health,
+            zigzagPhase: type === EnemyType.ZIGZAG ? Math.random() * Math.PI * 2 : undefined
+          };
+
+          setAliens(prev => [...prev, newAlien]);
         }
-        
-        const stats = getEnemyStats(type);
-        const newAlien: Alien = {
-          id: alienIdCounter.current++,
-          x: type === EnemyType.BOSS ? 50 : Math.random() * 80 + 10,
-          y: -5,
-          type,
-          speed: stats.speed + wave * 0.02,
-          health: stats.health,
-          maxHealth: stats.health,
-          zigzagPhase: type === EnemyType.ZIGZAG ? Math.random() * Math.PI * 2 : undefined
-        };
-        
-        setAliens(prev => [...prev, newAlien]);
       }
-      
-      // Check wave progression
-      if (currentAliens.length === 0 && score > 0) {
-        setWave(prev => prev + 1);
-        createParticles(50, 50, 20, '#22d3ee');
+
+      // Check level completion
+      if (currentAliens.length === 0 && enemiesKilledInLevel >= levelConfig.enemies && score > 0) {
+        if (level < 11) {
+          setLevelComplete(true);
+          createParticles(50, 50, 20, '#22d3ee');
+          setTimeout(() => {
+            setLevel(prev => prev + 1);
+            setEnemiesKilledInLevel(0);
+            setLevelComplete(false);
+          }, 2000);
+        } else {
+          // Game won!
+          setGameWon(true);
+          setGameOver(true);
+          setGameStarted(false);
+          audioManager.stopBackgroundMusic();
+          audioManager.playSound('gameStart');
+
+          if (score > highScore) {
+            setHighScore(score);
+            localStorage.setItem('spaceShooterHighScore', score.toString());
+          }
+
+          if (playerName) {
+            saveToLeaderboard(playerName, score, level);
+          }
+        }
       }
     };
 
@@ -737,6 +844,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setGameStarted(true);
     setGameOver(false);
     setGamePaused(false);
+    setGameWon(false);
     setScore(0);
     setLives(CONSTANTS.INITIAL_LIVES);
     setPlayerX(CONSTANTS.PLAYER_START_X);
@@ -745,6 +853,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setPowerUps([]);
     setExplosions([]);
     setParticles([]);
+    setLevel(1);
+    setEnemiesKilledInLevel(0);
+    setLevelComplete(false);
     setWave(1);
     setCombo(0);
     setLastKillTime(0);
@@ -773,6 +884,22 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     }, 600); // Start music after start sound
   };
 
+  const handleStartClick = () => {
+    if (!playerName.trim()) {
+      setShowNameInput(true);
+    } else {
+      startGame();
+    }
+  };
+
+  const handleNameSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (playerName.trim()) {
+      setShowNameInput(false);
+      startGame();
+    }
+  };
+
   // Pause menu handlers
   const handleResume = () => {
     setGamePaused(false);
@@ -789,6 +916,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setGamePaused(false);
     setGameStarted(false);
     setGameOver(false);
+    setGameWon(false);
     audioManager.stopBackgroundMusic();
     // Reset game state
     setScore(0);
@@ -799,6 +927,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setPowerUps([]);
     setExplosions([]);
     setParticles([]);
+    setLevel(1);
+    setEnemiesKilledInLevel(0);
+    setLevelComplete(false);
     setWave(1);
     setCombo(0);
     setLastKillTime(0);
@@ -959,18 +1090,18 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           </div>
           
           <div className="flex gap-4 items-center">
-            {/* Wave indicator */}
+            {/* Level indicator */}
             <div className="text-green-400 font-mono text-lg">
-              WAVE: {wave}
+              {getLevelConfig(level).description}
             </div>
-            
+
             {/* Combo indicator */}
             {combo > 1 && (
               <div className="text-yellow-400 font-mono text-lg animate-pulse">
                 COMBO x{combo}
               </div>
             )}
-            
+
             {/* Score */}
             <div className="score-display text-2xl font-bold px-4 py-2">
               SCORE: {score.toString().padStart(6, '0')}
@@ -1035,6 +1166,24 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         )}
       </div>
       
+      {/* Level Complete Notification */}
+      {levelComplete && gameStarted && !gameOver && (
+        <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
+          <div className="text-center">
+            <div className="text-6xl font-bold text-green-400 mb-4 animate-pulse" style={{
+              fontFamily: 'monospace',
+              letterSpacing: '0.2em',
+              textShadow: '0 0 20px #22c55e'
+            }}>
+              LEVEL {level} COMPLETE!
+            </div>
+            <div className="text-2xl text-yellow-400 font-mono">
+              NEXT LEVEL STARTING...
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Pause Menu */}
       {gamePaused && gameStarted && !gameOver && (
         <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/70">
@@ -1133,61 +1282,111 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         </div>
       )}
 
-      {/* Aliens - Larger Red Enemy Ships */}
-      {gameStarted && !gameOver && aliens.map((alien) => (
+      {/* Aliens - Enemy Ships with Different Colors */}
+      {gameStarted && !gameOver && aliens.map((alien) => {
+        const colors = getEnemyColors(alien.type);
+        const isBoss = alien.type === EnemyType.BOSS;
+        const size = isBoss ? 100 : alien.type === EnemyType.TANK ? 60 : alien.type === EnemyType.SWARM ? 40 : 50;
+
+        return (
         <div key={alien.id}>
           <div
             className="alien"
-            style={{ left: `${alien.x}%`, top: `${alien.y}%` }}
+            style={{
+              left: `${alien.x}%`,
+              top: `${alien.y}%`,
+              width: isBoss ? '80px' : alien.type === EnemyType.TANK ? '60px' : alien.type === EnemyType.SWARM ? '40px' : '50px',
+              height: isBoss ? '80px' : alien.type === EnemyType.TANK ? '60px' : alien.type === EnemyType.SWARM ? '40px' : '50px'
+            }}
             role="img"
             aria-label={`${alien.type} enemy ship`}
           >
             <svg viewBox="0 0 50 50" className="w-full h-full">
               <defs>
                 <linearGradient id={`alienGradient${alien.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#ef4444" />
-                  <stop offset="50%" stopColor="#dc2626" />
-                  <stop offset="100%" stopColor="#991b1b" />
+                  <stop offset="0%" stopColor={colors.primary} />
+                  <stop offset="50%" stopColor={colors.secondary} />
+                  <stop offset="100%" stopColor={colors.tertiary} />
                 </linearGradient>
               </defs>
-              {/* Main body - inverted triangle */}
-              <path
-                d="M25 8 L40 35 L25 30 L10 35 Z"
-                fill={`url(#alienGradient${alien.id})`}
-                stroke="#7f1d1d"
-                strokeWidth="2"
-              />
-              {/* Left wing */}
-              <path
-                d="M10 20 L5 25 L10 28 Z"
-                fill="#dc2626"
-                stroke="#991b1b"
-                strokeWidth="1.5"
-              />
-              {/* Right wing */}
-              <path
-                d="M40 20 L45 25 L40 28 Z"
-                fill="#dc2626"
-                stroke="#991b1b"
-                strokeWidth="1.5"
-              />
+
+              {/* Shield effect for SHIELD type */}
+              {alien.type === EnemyType.SHIELD && (
+                <circle cx="25" cy="25" r="22" fill="none" stroke={colors.primary} strokeWidth="2" opacity="0.5">
+                  <animate attributeName="r" values="20;22;20" dur="1s" repeatCount="indefinite" />
+                </circle>
+              )}
+
+              {/* Different shapes for different enemy types */}
+              {(alien.type === EnemyType.BOSS || alien.type === EnemyType.ELITE) ? (
+                <>
+                  {/* Large inverted triangle for boss/elite */}
+                  <path
+                    d="M25 5 L45 40 L25 35 L5 40 Z"
+                    fill={`url(#alienGradient${alien.id})`}
+                    stroke={colors.tertiary}
+                    strokeWidth="2"
+                  />
+                  <path d="M5 25 L1 30 L5 35 Z" fill={colors.secondary} stroke={colors.tertiary} strokeWidth="1.5" />
+                  <path d="M45 25 L49 30 L45 35 Z" fill={colors.secondary} stroke={colors.tertiary} strokeWidth="1.5" />
+                </>
+              ) : alien.type === EnemyType.SWARM ? (
+                <>
+                  {/* Small triangle for swarm */}
+                  <path
+                    d="M25 12 L35 32 L25 28 L15 32 Z"
+                    fill={`url(#alienGradient${alien.id})`}
+                    stroke={colors.tertiary}
+                    strokeWidth="2"
+                  />
+                </>
+              ) : (
+                <>
+                  {/* Standard inverted triangle */}
+                  <path
+                    d="M25 8 L40 35 L25 30 L10 35 Z"
+                    fill={`url(#alienGradient${alien.id})`}
+                    stroke={colors.tertiary}
+                    strokeWidth="2"
+                  />
+                  <path d="M10 20 L5 25 L10 28 Z" fill={colors.secondary} stroke={colors.tertiary} strokeWidth="1.5" />
+                  <path d="M40 20 L45 25 L40 28 Z" fill={colors.secondary} stroke={colors.tertiary} strokeWidth="1.5" />
+                </>
+              )}
+
               {/* Cockpit */}
-              <circle cx="25" cy="18" r="4" fill="#1f2937" />
-              <circle cx="25" cy="18" r="3" fill="#ef4444" opacity="0.7">
+              <circle cx="25" cy={alien.type === EnemyType.SWARM ? "20" : "18"} r={alien.type === EnemyType.SWARM ? "3" : "4"} fill="#1f2937" />
+              <circle cx="25" cy={alien.type === EnemyType.SWARM ? "20" : "18"} r={alien.type === EnemyType.SWARM ? "2" : "3"} fill={colors.primary} opacity="0.7">
                 <animate attributeName="opacity" values="0.5;0.9;0.5" dur="1s" repeatCount="indefinite" />
               </circle>
-              {/* Engine exhausts */}
-              <circle cx="18" cy="32" r="2" fill="#fbbf24" opacity="0.8">
-                <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite" />
-              </circle>
-              <circle cx="32" cy="32" r="2" fill="#fbbf24" opacity="0.8">
-                <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite" />
-              </circle>
+
+              {/* Engine exhausts - different for stealth */}
+              {alien.type === EnemyType.STEALTH ? (
+                <circle cx="25" cy="32" r="2" fill={colors.primary} opacity="0.4">
+                  <animate attributeName="opacity" values="0.2;0.6;0.2" dur="0.5s" repeatCount="indefinite" />
+                </circle>
+              ) : (
+                <>
+                  <circle cx="18" cy={alien.type === EnemyType.SWARM ? "30" : "32"} r="2" fill="#fbbf24" opacity="0.8">
+                    <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="32" cy={alien.type === EnemyType.SWARM ? "30" : "32"} r="2" fill="#fbbf24" opacity="0.8">
+                    <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite" />
+                  </circle>
+                </>
+              )}
+
+              {/* Special marker for bomber */}
+              {alien.type === EnemyType.BOMBER && (
+                <circle cx="25" cy="25" r="3" fill="#f97316" opacity="0.8">
+                  <animate attributeName="r" values="2;4;2" dur="0.5s" repeatCount="indefinite" />
+                </circle>
+              )}
             </svg>
           </div>
 
-          {/* Boss Health Bar */}
-          {alien.type === EnemyType.BOSS && (
+          {/* Health Bar for Boss and Elite */}
+          {(alien.type === EnemyType.BOSS || alien.type === EnemyType.ELITE) && (
             <div
               className="absolute z-10"
               style={{
@@ -1206,12 +1405,13 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
                 </div>
               </div>
               <div className="text-center text-white font-mono text-xs mt-1 font-bold drop-shadow-[0_0_3px_rgba(0,0,0,1)]">
-                BOSS: {alien.health}/{alien.maxHealth}
+                {alien.type === EnemyType.BOSS ? 'BOSS' : 'ELITE'}: {alien.health}/{alien.maxHealth}
               </div>
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
 
       {/* Bullets - Small Red Lasers */}
       {gameStarted && !gameOver && bullets.map((bullet) => (
@@ -1232,10 +1432,10 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       ))}
 
       {/* Start Screen - Retro Style */}
-      {!gameStarted && !gameOver && (
+      {!gameStarted && !gameOver && !showNameInput && !showLeaderboard && (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4">
           {/* Retro Title */}
-          <div className="text-center mb-12">
+          <div className="text-center mb-8">
             <h1 className="retro-title text-7xl font-bold mb-4 text-green-400" style={{
               fontFamily: 'monospace',
               letterSpacing: '0.2em',
@@ -1250,50 +1450,46 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
             }}>
               SHOOTER
             </h1>
-            <div className="flex justify-center gap-2 mb-8">
+            <div className="flex justify-center gap-2 mb-4">
               <div className="w-3 h-3 bg-green-400"></div>
               <div className="w-3 h-3 bg-green-400"></div>
               <div className="w-3 h-3 bg-green-400"></div>
             </div>
           </div>
 
-          {/* Instructions Box - Retro Style */}
-          <div className="retro-box mb-8 p-6 border-4 border-green-400 bg-black max-w-md">
-            <h2 className="text-green-400 text-xl font-bold mb-4 text-center" style={{
-              fontFamily: 'monospace',
-              letterSpacing: '0.15em'
-            }}>
-              CONTROLS
-            </h2>
-            <div className="text-green-400 space-y-2" style={{ fontFamily: 'monospace' }}>
-              <div className="flex justify-between items-center border-b border-green-400/30 pb-2">
-                <span>MOVE LEFT</span>
-                <span className="font-bold">← or A</span>
-              </div>
-              <div className="flex justify-between items-center border-b border-green-400/30 pb-2">
-                <span>MOVE RIGHT</span>
-                <span className="font-bold">→ or D</span>
-              </div>
-              <div className="flex justify-between items-center pb-2">
-                <span>FIRE</span>
-                <span className="font-bold">SPACE</span>
-              </div>
+          {/* Player name display or input prompt */}
+          {playerName && (
+            <div className="text-green-400 font-mono text-lg mb-4">
+              PILOT: {playerName}
             </div>
-          </div>
+          )}
 
-          {/* Start Button - Retro Style */}
-          <button
-            onClick={startGame}
-            className="retro-button px-12 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-2xl hover:bg-green-400 hover:text-black transition-all"
-            style={{
-              fontFamily: 'monospace',
-              letterSpacing: '0.2em'
-            }}
-            aria-label="Start new game"
-            autoFocus
-          >
-            START GAME
-          </button>
+          {/* Buttons */}
+          <div className="space-y-4">
+            <button
+              onClick={handleStartClick}
+              className="retro-button px-12 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-2xl hover:bg-green-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.2em'
+              }}
+              aria-label="Start new game"
+              autoFocus
+            >
+              START GAME
+            </button>
+
+            <button
+              onClick={() => setShowLeaderboard(true)}
+              className="retro-button px-12 py-4 border-4 border-yellow-400 bg-black text-yellow-400 font-bold text-xl hover:bg-yellow-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.2em'
+              }}
+            >
+              LEADERBOARD
+            </button>
+          </div>
 
           {/* Touch Controls Info for Mobile */}
           <div className="mt-6 text-green-400 text-sm md:hidden" style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}>
@@ -1307,36 +1503,200 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         </div>
       )}
 
-      {/* Game Over Screen - Retro Style */}
-      {gameOver && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4">
-          <div className="retro-box border-4 border-red-500 bg-black p-12 max-w-lg">
-            <h2 className="text-6xl font-bold text-red-500 mb-6 text-center" style={{
+      {/* Name Input Screen */}
+      {showNameInput && !gameStarted && (
+        <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/80">
+          <div className="retro-box border-4 border-green-400 bg-black p-8 max-w-md">
+            <h2 className="text-3xl font-bold text-green-400 mb-6 text-center" style={{
               fontFamily: 'monospace',
               letterSpacing: '0.2em'
             }}>
-              GAME OVER
+              ENTER YOUR NAME
             </h2>
-            
-            <div className="border-4 border-red-500/50 bg-black p-6 mb-8">
-              <div className="text-green-400 text-center mb-2" style={{ fontFamily: 'monospace' }}>
-                FINAL SCORE
+            <form onSubmit={handleNameSubmit} className="space-y-6">
+              <input
+                type="text"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value.slice(0, 20))}
+                className="w-full px-4 py-3 border-4 border-green-400 bg-black text-green-400 font-mono text-xl text-center focus:outline-none focus:bg-green-400 focus:text-black"
+                placeholder="PILOT NAME"
+                maxLength={20}
+                autoFocus
+                style={{ letterSpacing: '0.1em' }}
+              />
+              <div className="space-y-3">
+                <button
+                  type="submit"
+                  disabled={!playerName.trim()}
+                  className="w-full retro-button px-8 py-3 border-4 border-green-400 bg-black text-green-400 font-bold text-xl hover:bg-green-400 hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    fontFamily: 'monospace',
+                    letterSpacing: '0.15em'
+                  }}
+                >
+                  START MISSION
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowNameInput(false)}
+                  className="w-full retro-button px-8 py-3 border-4 border-red-400 bg-black text-red-400 font-bold text-lg hover:bg-red-400 hover:text-black transition-all"
+                  style={{
+                    fontFamily: 'monospace',
+                    letterSpacing: '0.15em'
+                  }}
+                >
+                  CANCEL
+                </button>
               </div>
-              <div className="text-5xl font-bold text-green-400 text-center" style={{ fontFamily: 'monospace' }}>
-                {score.toString().padStart(6, '0')}
-              </div>
-            </div>
+            </form>
+          </div>
+        </div>
+      )}
 
+      {/* Leaderboard Screen */}
+      {showLeaderboard && !gameStarted && (
+        <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/90 px-4">
+          <div className="retro-box border-4 border-yellow-400 bg-black p-8 max-w-2xl w-full">
+            <h2 className="text-4xl font-bold text-yellow-400 mb-6 text-center" style={{
+              fontFamily: 'monospace',
+              letterSpacing: '0.2em'
+            }}>
+              TOP PILOTS
+            </h2>
+            <div className="space-y-2 mb-6">
+              {getLeaderboard().length === 0 ? (
+                <div className="text-green-400 text-center py-8 font-mono">
+                  NO SCORES YET
+                </div>
+              ) : (
+                getLeaderboard().map((entry, index) => (
+                  <div
+                    key={index}
+                    className="flex justify-between items-center border-2 border-yellow-400/30 p-3 bg-black/50"
+                  >
+                    <div className="flex items-center gap-4">
+                      <span className="text-yellow-400 font-mono text-2xl font-bold" style={{ width: '40px' }}>
+                        #{index + 1}
+                      </span>
+                      <span className="text-green-400 font-mono text-lg">
+                        {entry.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-cyan-400 font-mono text-sm">
+                        LVL {entry.level}
+                      </span>
+                      <span className="text-green-400 font-mono text-xl font-bold">
+                        {entry.score.toString().padStart(6, '0')}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
             <button
-              onClick={startGame}
-              className="w-full retro-button px-8 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-xl hover:bg-green-400 hover:text-black transition-all"
+              onClick={() => setShowLeaderboard(false)}
+              className="w-full retro-button px-8 py-3 border-4 border-yellow-400 bg-black text-yellow-400 font-bold text-xl hover:bg-yellow-400 hover:text-black transition-all"
               style={{
                 fontFamily: 'monospace',
                 letterSpacing: '0.15em'
               }}
             >
-              PLAY AGAIN
+              BACK
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Game Over Screen - Retro Style */}
+      {gameOver && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4 overflow-y-auto py-8">
+          <div className="retro-box border-4 border-red-500 bg-black p-8 max-w-2xl w-full">
+            <h2 className="text-5xl font-bold text-center mb-4" style={{
+              fontFamily: 'monospace',
+              letterSpacing: '0.2em',
+              color: gameWon ? '#22c55e' : '#ef4444'
+            }}>
+              {gameWon ? 'VICTORY!' : 'GAME OVER'}
+            </h2>
+
+            {gameWon && (
+              <div className="text-yellow-400 text-center mb-4 font-mono text-xl">
+                ALL LEVELS COMPLETED!
+              </div>
+            )}
+
+            <div className="border-4 border-red-500/50 bg-black p-6 mb-6">
+              <div className="text-green-400 text-center mb-2" style={{ fontFamily: 'monospace' }}>
+                {playerName ? `PILOT: ${playerName}` : 'FINAL SCORE'}
+              </div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-green-400 font-mono">LEVEL REACHED:</span>
+                <span className="text-green-400 font-mono text-2xl font-bold">{level}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-green-400 font-mono">SCORE:</span>
+                <span className="text-green-400 font-mono text-3xl font-bold">{score.toString().padStart(6, '0')}</span>
+              </div>
+            </div>
+
+            {/* Mini Leaderboard */}
+            <div className="border-4 border-yellow-400/50 bg-black p-4 mb-6">
+              <h3 className="text-yellow-400 font-mono text-lg mb-3 text-center">TOP 5 PILOTS</h3>
+              <div className="space-y-2">
+                {getLeaderboard().slice(0, 5).map((entry, index) => (
+                  <div
+                    key={index}
+                    className={`flex justify-between items-center p-2 ${
+                      playerName && entry.name === playerName && entry.score === score
+                        ? 'bg-green-400/20 border-2 border-green-400'
+                        : 'border border-yellow-400/30'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-yellow-400 font-mono font-bold">#{index + 1}</span>
+                      <span className="text-green-400 font-mono text-sm">{entry.name}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-cyan-400 font-mono text-xs">L{entry.level}</span>
+                      <span className="text-green-400 font-mono">{entry.score.toString().padStart(6, '0')}</span>
+                    </div>
+                  </div>
+                ))}
+                {getLeaderboard().length === 0 && (
+                  <div className="text-green-400/50 text-center font-mono text-sm py-2">
+                    No scores yet
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={startGame}
+                className="w-full retro-button px-8 py-3 border-4 border-green-400 bg-black text-green-400 font-bold text-xl hover:bg-green-400 hover:text-black transition-all"
+                style={{
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.15em'
+                }}
+              >
+                PLAY AGAIN
+              </button>
+              <button
+                onClick={() => {
+                  setGameOver(false);
+                  setGameWon(false);
+                  setShowLeaderboard(true);
+                }}
+                className="w-full retro-button px-8 py-3 border-4 border-yellow-400 bg-black text-yellow-400 font-bold text-lg hover:bg-yellow-400 hover:text-black transition-all"
+                style={{
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.15em'
+                }}
+              >
+                VIEW LEADERBOARD
+              </button>
+            </div>
           </div>
         </div>
       )}
