@@ -7,6 +7,11 @@ export enum EnemyType {
   TANK = 'tank',
   ZIGZAG = 'zigzag',
   SHOOTER = 'shooter',
+  LEVEL_6 = 'level_6',
+  LEVEL_7 = 'level_7',
+  LEVEL_8 = 'level_8',
+  LEVEL_9 = 'level_9',
+  LEVEL_10 = 'level_10',
   BOSS = 'boss'
 }
 
@@ -90,4 +95,9 @@ export interface ActivePowerUps {
   timeSlow: number;
   scoreMultiplier: number;
   extraLife: number;
+}
+
+export interface LeaderboardEntry {
+  name: string;
+  score: number;
 }

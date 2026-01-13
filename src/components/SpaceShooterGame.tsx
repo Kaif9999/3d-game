@@ -2,8 +2,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import audioManager from '@/utils/audioManager';
 import * as CONSTANTS from '@/lib/gameConstants';
-import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps } from '@/lib/types';
+import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps, type LeaderboardEntry } from '@/lib/types';
 import { powerUpTypeToStateKey, getPowerUpDisplayName, getPowerUpColor } from '@/lib/powerUpUtils';
+import { getEnemySvg } from '@/lib/enemyUtils';
+import { getLeaderboard, saveScore } from '@/lib/leaderboard';
 
 interface SpaceShooterGameProps {}
 
@@ -46,6 +48,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [scoreMultiplier, setScoreMultiplier] = useState(1);
   const [timeSlowActive, setTimeSlowActive] = useState(false);
   const [wave, setWave] = useState(1);
+  const [playerName, setPlayerName] = useState('');
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   
   // Power-up states
   const [activePowerUps, setActivePowerUps] = useState<ActivePowerUps>({
@@ -91,6 +96,10 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   useEffect(() => {
     powerUpsRef.current = powerUps;
   }, [powerUps]);
+
+  useEffect(() => {
+    setLeaderboard(getLeaderboard());
+  }, []);
 
   // Initialize stars
   useEffect(() => {
@@ -159,7 +168,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
 
   // Helper function to spawn power-up
   const spawnPowerUp = (x: number, y: number) => {
-    if (Math.random() < 0.2) { // 20% chance
+    if (Math.random() < CONSTANTS.POWERUP_SPAWN_CHANCE) { // 20% chance
       const types = Object.values(PowerUpType);
       const type = types[Math.floor(Math.random() * types.length)];
       setPowerUps(prev => [...prev, {
@@ -183,6 +192,16 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         return { health: 1, speed: 0.4, points: 200 }; // Changed to 1 health
       case EnemyType.SHOOTER:
         return { health: 1, speed: 0.3, points: 250 }; // Changed to 1 health
+      case EnemyType.LEVEL_6:
+        return { health: 2, speed: 0.5, points: 400 };
+      case EnemyType.LEVEL_7:
+        return { health: 2, speed: 0.6, points: 450 };
+      case EnemyType.LEVEL_8:
+        return { health: 3, speed: 0.4, points: 500 };
+      case EnemyType.LEVEL_9:
+        return { health: 3, speed: 0.5, points: 550 };
+      case EnemyType.LEVEL_10:
+        return { health: 4, speed: 0.3, points: 600 };
       case EnemyType.BOSS:
         return { health: 20, speed: 0.15, points: 5000 }; // Boss still has multiple health
       default:
@@ -198,10 +217,11 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       { enemies: 20, types: [EnemyType.BASIC, EnemyType.TANK], spawnDelay: 1600, description: "Heavy Resistance" },
       { enemies: 25, types: [EnemyType.BASIC, EnemyType.ZIGZAG], spawnDelay: 1400, description: "Evasive Maneuvers" },
       { enemies: 30, types: [EnemyType.BASIC, EnemyType.SHOOTER], spawnDelay: 1200, description: "Under Fire" },
-      { enemies: 35, types: [EnemyType.FAST, EnemyType.ZIGZAG], spawnDelay: 1000, description: "Chaos Mode" },
-      { enemies: 40, types: [EnemyType.TANK, EnemyType.SHOOTER], spawnDelay: 900, description: "Heavy Artillery" },
-      { enemies: 45, types: [EnemyType.FAST, EnemyType.SHOOTER, EnemyType.ZIGZAG], spawnDelay: 800, description: "Elite Forces" },
-      { enemies: 50, types: [EnemyType.BASIC, EnemyType.FAST, EnemyType.TANK, EnemyType.ZIGZAG, EnemyType.SHOOTER], spawnDelay: 700, description: "Final Assault" },
+      { enemies: 35, types: [EnemyType.FAST, EnemyType.ZIGZAG, EnemyType.LEVEL_6], spawnDelay: 1000, description: "Chaos Mode" },
+      { enemies: 40, types: [EnemyType.TANK, EnemyType.SHOOTER, EnemyType.LEVEL_7], spawnDelay: 900, description: "Heavy Artillery" },
+      { enemies: 45, types: [EnemyType.FAST, EnemyType.SHOOTER, EnemyType.ZIGZAG, EnemyType.LEVEL_8], spawnDelay: 800, description: "Elite Forces" },
+      { enemies: 50, types: [EnemyType.BASIC, EnemyType.FAST, EnemyType.TANK, EnemyType.ZIGZAG, EnemyType.SHOOTER, EnemyType.LEVEL_9], spawnDelay: 700, description: "Final Assault" },
+      { enemies: 55, types: [EnemyType.LEVEL_6, EnemyType.LEVEL_7, EnemyType.LEVEL_8, EnemyType.LEVEL_9, EnemyType.LEVEL_10], spawnDelay: 600, description: "Ultimate Challenge" },
       { enemies: 1, types: [EnemyType.BOSS], spawnDelay: 5000, description: "Boss Battle" }
     ];
     return configs[Math.min(level - 1, configs.length - 1)];
@@ -659,6 +679,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
                 setHighScore(score);
                 localStorage.setItem('spaceShooterHighScore', score.toString());
               }
+              saveScore(playerName, score);
+              setLeaderboard(getLeaderboard());
             }
             return newLives;
           });
@@ -731,6 +753,10 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   }, [gameStarted, gameOver, gamePaused, score, playerX, wave, combo, highScore, activePowerUps, lastKillTime]);
 
   const startGame = async () => {
+    if (!playerName) {
+      alert('Please enter your name to start the game.');
+      return;
+    }
     // Initialize audio on user interaction
     await audioManager.initializeOnUserInteraction();
 
@@ -1141,49 +1167,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
             style={{ left: `${alien.x}%`, top: `${alien.y}%` }}
             role="img"
             aria-label={`${alien.type} enemy ship`}
+            dangerouslySetInnerHTML={{ __html: getEnemySvg(alien.type) }}
           >
-            <svg viewBox="0 0 50 50" className="w-full h-full">
-              <defs>
-                <linearGradient id={`alienGradient${alien.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#ef4444" />
-                  <stop offset="50%" stopColor="#dc2626" />
-                  <stop offset="100%" stopColor="#991b1b" />
-                </linearGradient>
-              </defs>
-              {/* Main body - inverted triangle */}
-              <path
-                d="M25 8 L40 35 L25 30 L10 35 Z"
-                fill={`url(#alienGradient${alien.id})`}
-                stroke="#7f1d1d"
-                strokeWidth="2"
-              />
-              {/* Left wing */}
-              <path
-                d="M10 20 L5 25 L10 28 Z"
-                fill="#dc2626"
-                stroke="#991b1b"
-                strokeWidth="1.5"
-              />
-              {/* Right wing */}
-              <path
-                d="M40 20 L45 25 L40 28 Z"
-                fill="#dc2626"
-                stroke="#991b1b"
-                strokeWidth="1.5"
-              />
-              {/* Cockpit */}
-              <circle cx="25" cy="18" r="4" fill="#1f2937" />
-              <circle cx="25" cy="18" r="3" fill="#ef4444" opacity="0.7">
-                <animate attributeName="opacity" values="0.5;0.9;0.5" dur="1s" repeatCount="indefinite" />
-              </circle>
-              {/* Engine exhausts */}
-              <circle cx="18" cy="32" r="2" fill="#fbbf24" opacity="0.8">
-                <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite" />
-              </circle>
-              <circle cx="32" cy="32" r="2" fill="#fbbf24" opacity="0.8">
-                <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite" />
-              </circle>
-            </svg>
           </div>
 
           {/* Boss Health Bar */}
@@ -1281,6 +1266,22 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
             </div>
           </div>
 
+          {/* Player Name Input */}
+          <div className="mb-4">
+            <input
+              type="text"
+              placeholder="ENTER YOUR NAME"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value.toUpperCase())}
+              maxLength={10}
+              className="retro-input w-full text-center px-4 py-2 border-4 border-green-400 bg-black text-green-400 font-bold text-xl"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.15em'
+              }}
+            />
+          </div>
+
           {/* Start Button - Retro Style */}
           <button
             onClick={startGame}
@@ -1293,6 +1294,18 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
             autoFocus
           >
             START GAME
+          </button>
+
+          {/* Leaderboard Button */}
+          <button
+            onClick={() => setShowLeaderboard(true)}
+            className="mt-4 retro-button px-8 py-2 border-2 border-yellow-400 bg-black text-yellow-400 font-bold text-lg hover:bg-yellow-400 hover:text-black transition-all"
+            style={{
+              fontFamily: 'monospace',
+              letterSpacing: '0.15em'
+            }}
+          >
+            LEADERBOARD
           </button>
 
           {/* Touch Controls Info for Mobile */}
@@ -1336,6 +1349,47 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               }}
             >
               PLAY AGAIN
+            </button>
+
+            {/* Leaderboard Button */}
+            <button
+              onClick={() => setShowLeaderboard(true)}
+              className="mt-4 w-full retro-button px-8 py-2 border-2 border-yellow-400 bg-black text-yellow-400 font-bold text-lg hover:bg-yellow-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.15em'
+              }}
+            >
+              LEADERBOARD
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Leaderboard Modal */}
+      {showLeaderboard && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-30 bg-black/80">
+          <div className="retro-box border-4 border-yellow-400 bg-black p-8 max-w-lg w-full">
+            <h2 className="text-4xl font-bold text-yellow-400 mb-6 text-center" style={{ fontFamily: 'monospace', letterSpacing: '0.2em' }}>
+              LEADERBOARD
+            </h2>
+            <ol className="list-decimal list-inside text-green-400 space-y-2" style={{ fontFamily: 'monospace' }}>
+              {leaderboard.map((entry, index) => (
+                <li key={index} className="flex justify-between">
+                  <span>{index + 1}. {entry.name}</span>
+                  <span>{entry.score.toString().padStart(6, '0')}</span>
+                </li>
+              ))}
+            </ol>
+            <button
+              onClick={() => setShowLeaderboard(false)}
+              className="mt-6 w-full retro-button px-8 py-2 border-2 border-green-400 bg-black text-green-400 font-bold text-lg hover:bg-green-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.15em'
+              }}
+            >
+              CLOSE
             </button>
           </div>
         </div>

@@ -133,3 +133,11 @@ body {
 .retro-button:hover {
   transform: scale(1.02);
 }
+
+.retro-input {
+  outline: none;
+}
+
+.retro-input:focus {
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
