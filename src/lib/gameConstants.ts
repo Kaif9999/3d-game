@@ -82,6 +82,11 @@ export const COMBO_SCORE_BONUS = 0.1; // 10% bonus per combo level
 // Storage Keys
 export const HIGH_SCORE_STORAGE_KEY = 'spaceShooterHighScore';
 
+// Level System
+export const TOTAL_LEVELS = 10;
+export const ENEMIES_PER_LEVEL_BASE = 15;
+export const LEVEL_TRANSITION_DELAY = 3000; // ms
+
 // Audio
 export const BACKGROUND_MUSIC_VOLUME = 0.3;
 export const SFX_VOLUME = 0.5;
