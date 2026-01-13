@@ -91,3 +91,23 @@ export interface ActivePowerUps {
   scoreMultiplier: number;
   extraLife: number;
 }
+
+// Leaderboard entry
+export interface LeaderboardEntry {
+  name: string;
+  score: number;
+  level: number;
+  date: string;
+}
+
+// Level configuration
+export interface LevelConfig {
+  level: number;
+  enemies: number;
+  types: EnemyType[];
+  spawnDelay: number;
+  description: string;
+  enemyColor: string;
+  enemyAccentColor: string;
+  enemyGlowColor: string;
+}

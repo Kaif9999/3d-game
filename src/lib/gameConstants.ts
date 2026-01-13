@@ -92,3 +92,8 @@ export const PLAYER_COLLISION_DISTANCE = 4; // distance in %
 
 // Wave System
 export const WAVE_CLEAR_THRESHOLD = 0; // Score must be > 0 to advance
+
+// Level System
+export const TOTAL_LEVELS = 10;
+export const ENEMIES_PER_LEVEL_BASE = 15;
+export const LEVEL_COMPLETE_DELAY = 2000; // ms before showing level complete screen
