@@ -81,6 +81,7 @@ export const COMBO_SCORE_BONUS = 0.1; // 10% bonus per combo level
 
 // Storage Keys
 export const HIGH_SCORE_STORAGE_KEY = 'spaceShooterHighScore';
+export const LEADERBOARD_STORAGE_KEY = 'spaceShooterLeaderboard';
 
 // Audio
 export const BACKGROUND_MUSIC_VOLUME = 0.3;

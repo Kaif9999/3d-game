@@ -2,8 +2,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import audioManager from '@/utils/audioManager';
 import * as CONSTANTS from '@/lib/gameConstants';
-import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps } from '@/lib/types';
+import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps, type ScoreEntry } from '@/lib/types';
 import { powerUpTypeToStateKey, getPowerUpDisplayName, getPowerUpColor } from '@/lib/powerUpUtils';
+import Leaderboard from './Leaderboard';
 
 interface SpaceShooterGameProps {}
 
@@ -15,7 +16,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [highScore, setHighScore] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
-        return parseInt(localStorage.getItem('spaceShooterHighScore') || '0');
+        return parseInt(localStorage.getItem(CONSTANTS.HIGH_SCORE_STORAGE_KEY) || '0');
       } catch (error) {
         console.warn('Failed to load high score from localStorage:', error);
         return 0;
@@ -23,6 +24,10 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     }
     return 0;
   });
+  const [leaderboard, setLeaderboard] = useState<ScoreEntry[]>([]);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [playerName, setPlayerName] = useState('');
+  const [submittingScore, setSubmittingScore] = useState(false);
   const [lives, setLives] = useState(CONSTANTS.INITIAL_LIVES);
   const [playerX, setPlayerX] = useState(CONSTANTS.PLAYER_START_X);
   const [volumeMusic, setVolumeMusic] = useState(CONSTANTS.BACKGROUND_MUSIC_VOLUME);
@@ -106,6 +111,20 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       });
     }
     setStars(initialStars);
+  }, []);
+
+  // Load leaderboard from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedLeaderboard = localStorage.getItem(CONSTANTS.LEADERBOARD_STORAGE_KEY);
+        if (savedLeaderboard) {
+          setLeaderboard(JSON.parse(savedLeaderboard));
+        }
+      } catch (error) {
+        console.warn('Failed to load leaderboard from localStorage:', error);
+      }
+    }
   }, []);
 
   // Safe audio manager wrapper
@@ -649,15 +668,14 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           setLives(prev => {
             const newLives = prev - 1;
             if (newLives <= 0) {
-              setGameOver(true);
-              setGameStarted(false);
+              setSubmittingScore(true); // Start the score submission process
               audioManager.stopBackgroundMusic();
               audioManager.playSound('gameOver');
               
               // Update high score
               if (score > highScore) {
                 setHighScore(score);
-                localStorage.setItem('spaceShooterHighScore', score.toString());
+                localStorage.setItem(CONSTANTS.HIGH_SCORE_STORAGE_KEY, score.toString());
               }
             }
             return newLives;
@@ -805,6 +823,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setScreenShake(0);
     setScoreMultiplier(1);
     setTimeSlowActive(false);
+    setSubmittingScore(false);
+    setPlayerName('');
     setActivePowerUps({
       doubleShot: 0,
       tripleShot: 0,
@@ -817,6 +837,27 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       scoreMultiplier: 0,
       extraLife: 0
     });
+  };
+
+  const handleScoreSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (playerName.trim() === '') return;
+
+    const newEntry: ScoreEntry = {
+      name: playerName,
+      score,
+      date: new Date().toISOString(),
+    };
+
+    const updatedLeaderboard = [...leaderboard, newEntry]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10);
+    
+    setLeaderboard(updatedLeaderboard);
+    localStorage.setItem(CONSTANTS.LEADERBOARD_STORAGE_KEY, JSON.stringify(updatedLeaderboard));
+
+    setSubmittingScore(false);
+    setGameOver(true);
   };
 
   // Touch controls for mobile
@@ -1281,19 +1322,50 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
             </div>
           </div>
 
-          {/* Start Button - Retro Style */}
-          <button
-            onClick={startGame}
-            className="retro-button px-12 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-2xl hover:bg-green-400 hover:text-black transition-all"
-            style={{
-              fontFamily: 'monospace',
-              letterSpacing: '0.2em'
-            }}
-            aria-label="Start new game"
-            autoFocus
-          >
-            START GAME
-          </button>
+          {/* Leaderboard Summary */}
+          {leaderboard.length > 0 && (
+            <div className="retro-box mb-8 p-6 border-4 border-cyan-400 bg-black max-w-md w-full">
+              <h2 className="text-cyan-400 text-xl font-bold mb-4 text-center" style={{ fontFamily: 'monospace', letterSpacing: '0.15em' }}>
+                TOP SCORES
+              </h2>
+              <ol className="text-cyan-400 space-y-1" style={{ fontFamily: 'monospace' }}>
+                {leaderboard.slice(0, 3).map((entry, index) => (
+                  <li key={index} className="flex justify-between">
+                    <span>{index + 1}. {entry.name}</span>
+                    <span>{entry.score}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {/* Buttons */}
+          <div className="flex gap-4">
+            <button
+              onClick={startGame}
+              className="retro-button px-12 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-2xl hover:bg-green-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.2em'
+              }}
+              aria-label="Start new game"
+              autoFocus
+            >
+              START GAME
+            </button>
+
+            <button
+              onClick={() => setShowLeaderboard(true)}
+              className="retro-button px-12 py-4 border-4 border-cyan-400 bg-black text-cyan-400 font-bold text-2xl hover:bg-cyan-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.2em'
+              }}
+              aria-label="View leaderboard"
+            >
+              LEADERBOARD
+            </button>
+          </div>
 
           {/* Touch Controls Info for Mobile */}
           <div className="mt-6 text-green-400 text-sm md:hidden" style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}>
@@ -1341,6 +1413,43 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         </div>
       )}
 
+      {/* Submit Score Screen */}
+      {submittingScore && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4 bg-black/80">
+          <div className="retro-box border-4 border-yellow-500 bg-black p-12 max-w-lg">
+            <h2 className="text-4xl font-bold text-yellow-500 mb-6 text-center" style={{ fontFamily: 'monospace', letterSpacing: '0.2em' }}>
+              NEW HIGH SCORE!
+            </h2>
+            <form onSubmit={handleScoreSubmit}>
+              <div className="mb-4">
+                <label htmlFor="playerName" className="block text-yellow-500 text-lg mb-2" style={{ fontFamily: 'monospace' }}>Enter your name:</label>
+                <input
+                  id="playerName"
+                  type="text"
+                  value={playerName}
+                  onChange={(e) => setPlayerName(e.target.value)}
+                  className="w-full bg-black border-2 border-yellow-500 text-yellow-500 p-2 text-xl focus:outline-none focus:border-yellow-300"
+                  style={{ fontFamily: 'monospace' }}
+                  maxLength={10}
+                  autoFocus
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full retro-button px-8 py-4 border-4 border-yellow-500 bg-black text-yellow-500 font-bold text-xl hover:bg-yellow-500 hover:text-black transition-all"
+                style={{ fontFamily: 'monospace', letterSpacing: '0.15em' }}
+              >
+                SUBMIT SCORE
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Leaderboard Screen */}
+      {showLeaderboard && (
+        <Leaderboard scores={leaderboard} onClose={() => setShowLeaderboard(false)} isDialog={true} />
+      )}
     </div>
   );
 }
