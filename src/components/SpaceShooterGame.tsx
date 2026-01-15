@@ -4,8 +4,11 @@ import audioManager from '@/utils/audioManager';
 import * as CONSTANTS from '@/lib/gameConstants';
 import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps } from '@/lib/types';
 import { powerUpTypeToStateKey, getPowerUpDisplayName, getPowerUpColor } from '@/lib/powerUpUtils';
+import { getLeaderboard, addToLeaderboard, type LeaderboardEntry } from '@/lib/leaderboard';
 
 interface SpaceShooterGameProps {}
+
+type ViewState = 'menu' | 'game' | 'leaderboard';
 
 export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [gameStarted, setGameStarted] = useState(false);
