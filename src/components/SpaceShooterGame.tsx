@@ -1,9 +1,12 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import audioManager from '@/utils/audioManager';
+import leaderboardManager from '@/utils/leaderboardManager';
 import * as CONSTANTS from '@/lib/gameConstants';
-import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps } from '@/lib/types';
+import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps, type LeaderboardEntry } from '@/lib/types';
 import { powerUpTypeToStateKey, getPowerUpDisplayName, getPowerUpColor } from '@/lib/powerUpUtils';
+import Leaderboard from './Leaderboard';
+import PlayerNameModal from './PlayerNameModal';
 
 interface SpaceShooterGameProps {}
 
@@ -11,6 +14,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [gameStarted, setGameStarted] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [gamePaused, setGamePaused] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -78,6 +84,11 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const aliensRef = useRef<Alien[]>([]);
   const bulletsRef = useRef<Bullet[]>([]);
   const powerUpsRef = useRef<PowerUp[]>([]);
+
+  // Load leaderboard on mount
+  useEffect(() => {
+    setLeaderboardEntries(leaderboardManager.getLeaderboard());
+  }, []);
 
   // Sync refs with state
   useEffect(() => {
@@ -659,6 +670,11 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
                 setHighScore(score);
                 localStorage.setItem('spaceShooterHighScore', score.toString());
               }
+              
+              // Check if score qualifies for leaderboard
+              if (leaderboardManager.isHighScore(score)) {
+                setShowNameModal(true);
+              }
             }
             return newLives;
           });
@@ -817,6 +833,25 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       scoreMultiplier: 0,
       extraLife: 0
     });
+  };
+
+  // Leaderboard handlers
+  const handleViewLeaderboard = () => {
+    setShowLeaderboard(true);
+  };
+
+  const handleBackFromLeaderboard = () => {
+    setShowLeaderboard(false);
+  };
+
+  const handleSaveScore = (playerName: string) => {
+    leaderboardManager.addEntry(playerName, score, wave);
+    setLeaderboardEntries(leaderboardManager.getLeaderboard());
+    setShowNameModal(false);
+  };
+
+  const handleSkipSaveScore = () => {
+    setShowNameModal(false);
   };
 
   // Touch controls for mobile
@@ -1232,10 +1267,10 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       ))}
 
       {/* Start Screen - Retro Style */}
-      {!gameStarted && !gameOver && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4">
+      {!gameStarted && !gameOver && !showLeaderboard && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4 overflow-y-auto py-8">
           {/* Retro Title */}
-          <div className="text-center mb-12">
+          <div className="text-center mb-8">
             <h1 className="retro-title text-7xl font-bold mb-4 text-green-400" style={{
               fontFamily: 'monospace',
               letterSpacing: '0.2em',
@@ -1257,8 +1292,13 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
             </div>
           </div>
 
+          {/* Leaderboard Preview */}
+          <div className="mb-6">
+            <Leaderboard entries={leaderboardEntries} compact maxEntries={5} />
+          </div>
+
           {/* Instructions Box - Retro Style */}
-          <div className="retro-box mb-8 p-6 border-4 border-green-400 bg-black max-w-md">
+          <div className="retro-box mb-6 p-6 border-4 border-green-400 bg-black max-w-md">
             <h2 className="text-green-400 text-xl font-bold mb-4 text-center" style={{
               fontFamily: 'monospace',
               letterSpacing: '0.15em'
@@ -1274,26 +1314,46 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
                 <span>MOVE RIGHT</span>
                 <span className="font-bold">→ or D</span>
               </div>
-              <div className="flex justify-between items-center pb-2">
+              <div className="flex justify-between items-center border-b border-green-400/30 pb-2">
                 <span>FIRE</span>
                 <span className="font-bold">SPACE</span>
+              </div>
+              <div className="flex justify-between items-center pb-2">
+                <span>PAUSE</span>
+                <span className="font-bold">ESC</span>
               </div>
             </div>
           </div>
 
-          {/* Start Button - Retro Style */}
-          <button
-            onClick={startGame}
-            className="retro-button px-12 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-2xl hover:bg-green-400 hover:text-black transition-all"
-            style={{
-              fontFamily: 'monospace',
-              letterSpacing: '0.2em'
-            }}
-            aria-label="Start new game"
-            autoFocus
-          >
-            START GAME
-          </button>
+          {/* Buttons */}
+          <div className="space-y-4 w-full max-w-md">
+            {/* Start Button - Retro Style */}
+            <button
+              onClick={startGame}
+              className="w-full retro-button px-12 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-2xl hover:bg-green-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.2em'
+              }}
+              aria-label="Start new game"
+              autoFocus
+            >
+              START GAME
+            </button>
+
+            {/* View Leaderboard Button */}
+            <button
+              onClick={handleViewLeaderboard}
+              className="w-full retro-button px-8 py-3 border-4 border-cyan-400 bg-black text-cyan-400 font-bold text-lg hover:bg-cyan-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.15em'
+              }}
+              aria-label="View full leaderboard"
+            >
+              VIEW LEADERBOARD
+            </button>
+          </div>
 
           {/* Touch Controls Info for Mobile */}
           <div className="mt-6 text-green-400 text-sm md:hidden" style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}>
@@ -1308,7 +1368,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       )}
 
       {/* Game Over Screen - Retro Style */}
-      {gameOver && (
+      {gameOver && !showNameModal && (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4">
           <div className="retro-box border-4 border-red-500 bg-black p-12 max-w-lg">
             <h2 className="text-6xl font-bold text-red-500 mb-6 text-center" style={{
@@ -1339,6 +1399,21 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Full Leaderboard Screen */}
+      {showLeaderboard && !gameStarted && (
+        <Leaderboard entries={leaderboardEntries} onBack={handleBackFromLeaderboard} />
+      )}
+
+      {/* Player Name Modal */}
+      {showNameModal && gameOver && (
+        <PlayerNameModal
+          score={score}
+          wave={wave}
+          onSubmit={handleSaveScore}
+          onSkip={handleSkipSaveScore}
+        />
       )}
 
     </div>
