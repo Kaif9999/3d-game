@@ -2,8 +2,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import audioManager from '@/utils/audioManager';
 import * as CONSTANTS from '@/lib/gameConstants';
-import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps } from '@/lib/types';
+import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps, type LeaderboardEntry } from '@/lib/types';
 import { powerUpTypeToStateKey, getPowerUpDisplayName, getPowerUpColor } from '@/lib/powerUpUtils';
+import { leaderboardManager } from '@/utils/leaderboardManager';
 
 interface SpaceShooterGameProps {}
 
@@ -11,6 +12,10 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [gameStarted, setGameStarted] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [gamePaused, setGamePaused] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [playerName, setPlayerName] = useState('');
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -73,6 +78,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const lastFireTime = useRef(0);
   const keysPressed = useRef<Set<string>>(new Set());
   const screenShakeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const finalWaveRef = useRef(1);
   
   // Use refs to track current state for collision detection
   const aliensRef = useRef<Alien[]>([]);
@@ -92,7 +98,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     powerUpsRef.current = powerUps;
   }, [powerUps]);
 
-  // Initialize stars
+  // Initialize stars and load leaderboard
   useEffect(() => {
     const initialStars: Star[] = [];
     for (let i = 0; i < 100; i++) {
@@ -106,6 +112,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       });
     }
     setStars(initialStars);
+
+    // Load leaderboard
+    setLeaderboard(leaderboardManager.getLeaderboard());
   }, []);
 
   // Safe audio manager wrapper
@@ -653,11 +662,19 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               setGameStarted(false);
               audioManager.stopBackgroundMusic();
               audioManager.playSound('gameOver');
-              
+
+              // Store final wave for leaderboard
+              finalWaveRef.current = wave;
+
               // Update high score
               if (score > highScore) {
                 setHighScore(score);
                 localStorage.setItem('spaceShooterHighScore', score.toString());
+              }
+
+              // Check if score qualifies for leaderboard
+              if (leaderboardManager.isHighScore(score)) {
+                setShowNamePrompt(true);
               }
             }
             return newLives;
@@ -891,6 +908,30 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     });
   };
 
+  const handleNameSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = playerName.trim() || 'Anonymous';
+
+    // Add to leaderboard
+    leaderboardManager.addEntry(name, score, finalWaveRef.current);
+    setLeaderboard(leaderboardManager.getLeaderboard());
+
+    // Close prompt
+    setShowNamePrompt(false);
+    setPlayerName('');
+  };
+
+  const skipNamePrompt = () => {
+    leaderboardManager.addEntry('Anonymous', score, finalWaveRef.current);
+    setLeaderboard(leaderboardManager.getLeaderboard());
+    setShowNamePrompt(false);
+    setPlayerName('');
+  };
+
+  const toggleLeaderboard = () => {
+    setShowLeaderboard(prev => !prev);
+  };
+
   return (
     <div
       ref={gameContainerRef}
@@ -954,6 +995,18 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
                 aria-pressed={gamePaused}
               >
                 {gamePaused ? 'RESUME' : 'PAUSE'}
+              </button>
+            )}
+
+            {/* Leaderboard button */}
+            {gameStarted && !gameOver && (
+              <button
+                onClick={toggleLeaderboard}
+                className="ml-2 px-3 py-1 border-2 border-yellow-400 bg-black text-yellow-400 font-mono text-sm hover:bg-yellow-400 hover:text-black transition-all"
+                style={{ letterSpacing: '0.1em' }}
+                aria-label="Toggle leaderboard"
+              >
+                LEADERBOARD
               </button>
             )}
           </div>
@@ -1231,6 +1284,113 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         />
       ))}
 
+      {/* Leaderboard Overlay (during game) */}
+      {showLeaderboard && gameStarted && !gameOver && (
+        <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/80">
+          <div className="retro-box border-4 border-yellow-400 bg-black p-8 max-w-2xl w-full mx-4">
+            <h2 className="text-4xl font-bold text-yellow-400 mb-6 text-center" style={{
+              fontFamily: 'monospace',
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase'
+            }}>
+              LEADERBOARD
+            </h2>
+
+            {leaderboard.length === 0 ? (
+              <p className="text-green-400 text-center font-mono text-lg mb-6">
+                No scores yet. Be the first!
+              </p>
+            ) : (
+              <div className="space-y-2 mb-6 max-h-96 overflow-y-auto">
+                {leaderboard.map((entry, index) => (
+                  <div
+                    key={entry.id}
+                    className="flex justify-between items-center p-3 border-2 border-green-400 bg-black/50"
+                    style={{ fontFamily: 'monospace' }}
+                  >
+                    <div className="flex items-center gap-4">
+                      <span className="text-yellow-400 text-xl font-bold w-8">#{index + 1}</span>
+                      <span className="text-green-400 text-lg">{entry.playerName}</span>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <span className="text-cyan-400 text-sm">WAVE {entry.wave}</span>
+                      <span className="text-green-400 text-xl font-bold">{entry.score.toString().padStart(6, '0')}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={toggleLeaderboard}
+              className="w-full retro-button px-8 py-4 border-4 border-yellow-400 bg-black text-yellow-400 font-bold text-xl hover:bg-yellow-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.15em'
+              }}
+            >
+              CLOSE
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Name Prompt for High Score */}
+      {showNamePrompt && gameOver && (
+        <div className="absolute inset-0 flex items-center justify-center z-40 bg-black/90">
+          <div className="retro-box border-4 border-yellow-400 bg-black p-8 max-w-md">
+            <h2 className="text-4xl font-bold text-yellow-400 mb-4 text-center" style={{
+              fontFamily: 'monospace',
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase'
+            }}>
+              NEW HIGH SCORE!
+            </h2>
+
+            <p className="text-green-400 text-center font-mono mb-6">
+              Score: {score.toString().padStart(6, '0')}
+            </p>
+
+            <form onSubmit={handleNameSubmit} className="space-y-4">
+              <input
+                type="text"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                placeholder="Enter your name"
+                maxLength={20}
+                className="w-full px-4 py-3 border-4 border-green-400 bg-black text-green-400 font-mono text-lg focus:outline-none focus:border-yellow-400"
+                style={{ letterSpacing: '0.1em' }}
+                autoFocus
+              />
+
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  className="flex-1 retro-button px-6 py-3 border-4 border-green-400 bg-black text-green-400 font-bold text-lg hover:bg-green-400 hover:text-black transition-all"
+                  style={{
+                    fontFamily: 'monospace',
+                    letterSpacing: '0.15em'
+                  }}
+                >
+                  SUBMIT
+                </button>
+                <button
+                  type="button"
+                  onClick={skipNamePrompt}
+                  className="flex-1 retro-button px-6 py-3 border-4 border-red-400 bg-black text-red-400 font-bold text-lg hover:bg-red-400 hover:text-black transition-all"
+                  style={{
+                    fontFamily: 'monospace',
+                    letterSpacing: '0.15em'
+                  }}
+                >
+                  SKIP
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Start Screen - Retro Style */}
       {!gameStarted && !gameOver && (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4">
@@ -1274,9 +1434,13 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
                 <span>MOVE RIGHT</span>
                 <span className="font-bold">→ or D</span>
               </div>
-              <div className="flex justify-between items-center pb-2">
+              <div className="flex justify-between items-center border-b border-green-400/30 pb-2">
                 <span>FIRE</span>
                 <span className="font-bold">SPACE</span>
+              </div>
+              <div className="flex justify-between items-center pb-2">
+                <span>PAUSE</span>
+                <span className="font-bold">ESC</span>
               </div>
             </div>
           </div>
@@ -1299,6 +1463,36 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           <div className="mt-6 text-green-400 text-sm md:hidden" style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}>
             TOUCH: Move ship • TAP: Fire
           </div>
+
+          {/* Leaderboard Preview on Start Screen */}
+          {leaderboard.length > 0 && (
+            <div className="mt-12 retro-box border-4 border-yellow-400 bg-black p-6 max-w-2xl w-full">
+              <h3 className="text-2xl font-bold text-yellow-400 mb-4 text-center" style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.15em'
+              }}>
+                TOP PLAYERS
+              </h3>
+              <div className="space-y-2">
+                {leaderboard.slice(0, 5).map((entry, index) => (
+                  <div
+                    key={entry.id}
+                    className="flex justify-between items-center p-2 border-2 border-green-400/30 bg-black/50"
+                    style={{ fontFamily: 'monospace' }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-yellow-400 font-bold w-6">#{index + 1}</span>
+                      <span className="text-green-400">{entry.playerName}</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-cyan-400 text-xs">W{entry.wave}</span>
+                      <span className="text-green-400 font-bold">{entry.score.toString().padStart(6, '0')}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Retro decoration */}
           <div className="mt-8 text-green-400/50 text-xs" style={{ fontFamily: 'monospace' }}>
