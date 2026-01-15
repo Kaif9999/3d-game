@@ -1,11 +1,18 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import audioManager from '@/utils/audioManager';
 import * as CONSTANTS from '@/lib/gameConstants';
 import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps } from '@/lib/types';
 import { powerUpTypeToStateKey, getPowerUpDisplayName, getPowerUpColor } from '@/lib/powerUpUtils';
 
 interface SpaceShooterGameProps {}
+
+interface LeaderboardEntry {
+  id: string;
+  name: string;
+  score: number;
+  date: string;
+}
 
 export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [gameStarted, setGameStarted] = useState(false);
@@ -46,6 +53,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [scoreMultiplier, setScoreMultiplier] = useState(1);
   const [timeSlowActive, setTimeSlowActive] = useState(false);
   const [wave, setWave] = useState(1);
+  const [playerName, setPlayerName] = useState('');
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   
   // Power-up states
   const [activePowerUps, setActivePowerUps] = useState<ActivePowerUps>({
@@ -73,6 +83,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const lastFireTime = useRef(0);
   const keysPressed = useRef<Set<string>>(new Set());
   const screenShakeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scoreRecordedRef = useRef(false);
   
   // Use refs to track current state for collision detection
   const aliensRef = useRef<Alien[]>([]);
@@ -91,6 +102,60 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   useEffect(() => {
     powerUpsRef.current = powerUps;
   }, [powerUps]);
+
+  // Load persisted player data
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const storedName = localStorage.getItem('spaceShooterPlayerName');
+      if (storedName) {
+        setPlayerName(storedName);
+      }
+      const storedLeaderboard = localStorage.getItem('spaceShooterLeaderboard');
+      if (storedLeaderboard) {
+        const parsed = JSON.parse(storedLeaderboard) as LeaderboardEntry[];
+        setLeaderboard(parsed);
+      }
+    } catch (error) {
+      console.warn('Failed to load player data from localStorage:', error);
+    }
+  }, []);
+
+  // Persist player name
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('spaceShooterPlayerName', playerName);
+    } catch (error) {
+      console.warn('Failed to store player name:', error);
+    }
+  }, [playerName]);
+
+  // Persist leaderboard
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('spaceShooterLeaderboard', JSON.stringify(leaderboard));
+    } catch (error) {
+      console.warn('Failed to store leaderboard:', error);
+    }
+  }, [leaderboard]);
+
+  const recordScore = useCallback((latestScore: number) => {
+    const trimmedName = playerName.trim() || 'ACE PILOT';
+    setLeaderboard(prev => {
+      const newEntry: LeaderboardEntry = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: trimmedName,
+        score: latestScore,
+        date: new Date().toISOString()
+      };
+      const updated = [...prev, newEntry].sort((a, b) => b.score - a.score).slice(0, 10);
+      return updated;
+    });
+  }, [playerName]);
+
+  const topLeaderboard = useMemo(() => leaderboard.slice(0, 5), [leaderboard]);
 
   // Initialize stars
   useEffect(() => {
@@ -649,16 +714,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           setLives(prev => {
             const newLives = prev - 1;
             if (newLives <= 0) {
-              setGameOver(true);
-              setGameStarted(false);
-              audioManager.stopBackgroundMusic();
-              audioManager.playSound('gameOver');
-              
-              // Update high score
-              if (score > highScore) {
-                setHighScore(score);
-                localStorage.setItem('spaceShooterHighScore', score.toString());
-              }
+              endGame();
             }
             return newLives;
           });
@@ -730,6 +786,27 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     };
   }, [gameStarted, gameOver, gamePaused, score, playerX, wave, combo, highScore, activePowerUps, lastKillTime]);
 
+  const endGame = useCallback(() => {
+    setGameOver(true);
+    setGameStarted(false);
+    safeAudioCall(() => audioManager.stopBackgroundMusic());
+    safeAudioCall(() => audioManager.playSound('gameOver'));
+
+    if (score > highScore) {
+      setHighScore(score);
+      try {
+        localStorage.setItem('spaceShooterHighScore', score.toString());
+      } catch (error) {
+        console.warn('Failed to store high score:', error);
+      }
+    }
+
+    if (!scoreRecordedRef.current) {
+      scoreRecordedRef.current = true;
+      recordScore(score);
+    }
+  }, [highScore, recordScore, score]);
+
   const startGame = async () => {
     // Initialize audio on user interaction
     await audioManager.initializeOnUserInteraction();
@@ -751,6 +828,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setScreenShake(0);
     setScoreMultiplier(1);
     setTimeSlowActive(false);
+    scoreRecordedRef.current = false;
     setActivePowerUps({
       doubleShot: 0,
       tripleShot: 0,
