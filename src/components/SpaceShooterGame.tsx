@@ -4,6 +4,7 @@ import audioManager from '@/utils/audioManager';
 import * as CONSTANTS from '@/lib/gameConstants';
 import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps } from '@/lib/types';
 import { powerUpTypeToStateKey, getPowerUpDisplayName, getPowerUpColor } from '@/lib/powerUpUtils';
+import { LeaderboardManager } from '@/lib/leaderboard';
 
 interface SpaceShooterGameProps {}
 
@@ -11,6 +12,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [gameStarted, setGameStarted] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [gamePaused, setGamePaused] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [playerName, setPlayerName] = useState('');
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -653,11 +657,16 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               setGameStarted(false);
               audioManager.stopBackgroundMusic();
               audioManager.playSound('gameOver');
-              
+
               // Update high score
               if (score > highScore) {
                 setHighScore(score);
                 localStorage.setItem('spaceShooterHighScore', score.toString());
+              }
+
+              // Check if score qualifies for leaderboard
+              if (LeaderboardManager.isTopScore(score)) {
+                setShowNamePrompt(true);
               }
             }
             return newLives;
@@ -789,6 +798,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setGamePaused(false);
     setGameStarted(false);
     setGameOver(false);
+    setShowLeaderboard(false);
+    setShowNamePrompt(false);
     audioManager.stopBackgroundMusic();
     // Reset game state
     setScore(0);
@@ -817,6 +828,23 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       scoreMultiplier: 0,
       extraLife: 0
     });
+  };
+
+  const handleSubmitScore = () => {
+    if (playerName.trim()) {
+      LeaderboardManager.addEntry({
+        playerName: playerName.trim(),
+        score: score,
+        wave: wave
+      });
+      setShowNamePrompt(false);
+      setPlayerName('');
+    }
+  };
+
+  const handleSkipLeaderboard = () => {
+    setShowNamePrompt(false);
+    setPlayerName('');
   };
 
   // Touch controls for mobile
@@ -1232,10 +1260,10 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       ))}
 
       {/* Start Screen - Retro Style */}
-      {!gameStarted && !gameOver && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4">
+      {!gameStarted && !gameOver && !showLeaderboard && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4 overflow-y-auto py-8">
           {/* Retro Title */}
-          <div className="text-center mb-12">
+          <div className="text-center mb-8">
             <h1 className="retro-title text-7xl font-bold mb-4 text-green-400" style={{
               fontFamily: 'monospace',
               letterSpacing: '0.2em',
@@ -1257,8 +1285,38 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
             </div>
           </div>
 
+          {/* Leaderboard Preview */}
+          {LeaderboardManager.getLeaderboard().length > 0 && (
+            <div className="retro-box mb-6 p-4 border-4 border-cyan-400 bg-black max-w-md w-full">
+              <h2 className="text-cyan-400 text-lg font-bold mb-3 text-center" style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.15em'
+              }}>
+                TOP SCORES
+              </h2>
+              <div className="text-cyan-400 space-y-1" style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                {LeaderboardManager.getLeaderboard().slice(0, 5).map((entry, index) => (
+                  <div key={entry.id} className="flex justify-between items-center border-b border-cyan-400/20 pb-1">
+                    <span className="flex gap-2">
+                      <span className="text-yellow-400 font-bold w-6">{index + 1}.</span>
+                      <span className="truncate max-w-[140px]">{entry.playerName}</span>
+                    </span>
+                    <span className="font-bold">{entry.score.toString().padStart(6, '0')}</span>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => setShowLeaderboard(true)}
+                className="mt-3 w-full px-4 py-2 border-2 border-cyan-400 bg-black text-cyan-400 font-mono text-sm hover:bg-cyan-400 hover:text-black transition-all"
+                style={{ letterSpacing: '0.1em' }}
+              >
+                VIEW ALL
+              </button>
+            </div>
+          )}
+
           {/* Instructions Box - Retro Style */}
-          <div className="retro-box mb-8 p-6 border-4 border-green-400 bg-black max-w-md">
+          <div className="retro-box mb-6 p-6 border-4 border-green-400 bg-black max-w-md">
             <h2 className="text-green-400 text-xl font-bold mb-4 text-center" style={{
               fontFamily: 'monospace',
               letterSpacing: '0.15em'
@@ -1274,9 +1332,13 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
                 <span>MOVE RIGHT</span>
                 <span className="font-bold">→ or D</span>
               </div>
-              <div className="flex justify-between items-center pb-2">
+              <div className="flex justify-between items-center border-b border-green-400/30 pb-2">
                 <span>FIRE</span>
                 <span className="font-bold">SPACE</span>
+              </div>
+              <div className="flex justify-between items-center pb-2">
+                <span>PAUSE</span>
+                <span className="font-bold">ESC</span>
               </div>
             </div>
           </div>
