@@ -2,8 +2,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import audioManager from '@/utils/audioManager';
 import * as CONSTANTS from '@/lib/gameConstants';
-import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps } from '@/lib/types';
+import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps, type LeaderboardEntry } from '@/lib/types';
 import { powerUpTypeToStateKey, getPowerUpDisplayName, getPowerUpColor } from '@/lib/powerUpUtils';
+import { getLeaderboard, addLeaderboardEntry, isLeaderboardScore } from '@/lib/leaderboardUtils';
+import Leaderboard from './Leaderboard';
 
 interface SpaceShooterGameProps {}
 
@@ -11,6 +13,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [gameStarted, setGameStarted] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [gamePaused, setGamePaused] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [playerName, setPlayerName] = useState('');
+  const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -106,6 +111,11 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       });
     }
     setStars(initialStars);
+  }, []);
+
+  // Load leaderboard on mount
+  useEffect(() => {
+    setLeaderboardEntries(getLeaderboard());
   }, []);
 
   // Safe audio manager wrapper
@@ -659,6 +669,18 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
                 setHighScore(score);
                 localStorage.setItem('spaceShooterHighScore', score.toString());
               }
+
+              // Save to leaderboard
+              if (playerName.trim()) {
+                const entry: LeaderboardEntry = {
+                  playerName: playerName.trim(),
+                  score: score,
+                  date: new Date().toISOString(),
+                  wave: wave
+                };
+                addLeaderboardEntry(entry);
+                setLeaderboardEntries(getLeaderboard());
+              }
             }
             return newLives;
           });
@@ -731,6 +753,11 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   }, [gameStarted, gameOver, gamePaused, score, playerX, wave, combo, highScore, activePowerUps, lastKillTime]);
 
   const startGame = async () => {
+    // Validate player name
+    if (!playerName.trim()) {
+      return; // Don't start game without a player name
+    }
+
     // Initialize audio on user interaction
     await audioManager.initializeOnUserInteraction();
 
@@ -789,6 +816,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setGamePaused(false);
     setGameStarted(false);
     setGameOver(false);
+    setShowLeaderboard(false);
     audioManager.stopBackgroundMusic();
     // Reset game state
     setScore(0);
@@ -1232,111 +1260,254 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       ))}
 
       {/* Start Screen - Retro Style */}
-      {!gameStarted && !gameOver && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4">
-          {/* Retro Title */}
-          <div className="text-center mb-12">
-            <h1 className="retro-title text-7xl font-bold mb-4 text-green-400" style={{
-              fontFamily: 'monospace',
-              letterSpacing: '0.2em',
-              textTransform: 'uppercase'
-            }}>
-              SPACE
-            </h1>
-            <h1 className="retro-title text-7xl font-bold mb-6 text-green-400" style={{
-              fontFamily: 'monospace',
-              letterSpacing: '0.2em',
-              textTransform: 'uppercase'
-            }}>
-              SHOOTER
-            </h1>
-            <div className="flex justify-center gap-2 mb-8">
-              <div className="w-3 h-3 bg-green-400"></div>
-              <div className="w-3 h-3 bg-green-400"></div>
-              <div className="w-3 h-3 bg-green-400"></div>
+      {!gameStarted && !gameOver && !showLeaderboard && (
+        <div className="absolute inset-0 flex items-center justify-center z-20 px-4 overflow-y-auto py-8">
+          <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Left Column - Title and Controls */}
+            <div className="flex flex-col items-center justify-center">
+              {/* Retro Title */}
+              <div className="text-center mb-8">
+                <h1 className="retro-title text-7xl font-bold mb-4 text-green-400" style={{
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.2em',
+                  textTransform: 'uppercase'
+                }}>
+                  SPACE
+                </h1>
+                <h1 className="retro-title text-7xl font-bold mb-6 text-green-400" style={{
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.2em',
+                  textTransform: 'uppercase'
+                }}>
+                  SHOOTER
+                </h1>
+                <div className="flex justify-center gap-2 mb-8">
+                  <div className="w-3 h-3 bg-green-400"></div>
+                  <div className="w-3 h-3 bg-green-400"></div>
+                  <div className="w-3 h-3 bg-green-400"></div>
+                </div>
+              </div>
+
+              {/* Player Name Input */}
+              <div className="retro-box mb-6 p-6 border-4 border-green-400 bg-black w-full max-w-md">
+                <h2 className="text-green-400 text-xl font-bold mb-4 text-center" style={{
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.15em'
+                }}>
+                  ENTER NAME
+                </h2>
+                <input
+                  type="text"
+                  value={playerName}
+                  onChange={(e) => setPlayerName(e.target.value.slice(0, 20))}
+                  placeholder="PLAYER"
+                  maxLength={20}
+                  className="w-full px-4 py-3 bg-black border-2 border-green-400 text-green-400 text-center text-xl font-bold focus:outline-none focus:border-yellow-400 transition-colors"
+                  style={{
+                    fontFamily: 'monospace',
+                    letterSpacing: '0.1em'
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && playerName.trim()) {
+                      startGame();
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Instructions Box - Retro Style */}
+              <div className="retro-box mb-6 p-6 border-4 border-green-400 bg-black w-full max-w-md">
+                <h2 className="text-green-400 text-xl font-bold mb-4 text-center" style={{
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.15em'
+                }}>
+                  CONTROLS
+                </h2>
+                <div className="text-green-400 space-y-2" style={{ fontFamily: 'monospace' }}>
+                  <div className="flex justify-between items-center border-b border-green-400/30 pb-2">
+                    <span>MOVE LEFT</span>
+                    <span className="font-bold">← or A</span>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-green-400/30 pb-2">
+                    <span>MOVE RIGHT</span>
+                    <span className="font-bold">→ or D</span>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-green-400/30 pb-2">
+                    <span>FIRE</span>
+                    <span className="font-bold">SPACE</span>
+                  </div>
+                  <div className="flex justify-between items-center pb-2">
+                    <span>PAUSE</span>
+                    <span className="font-bold">ESC</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Start Button - Retro Style */}
+              <button
+                onClick={startGame}
+                disabled={!playerName.trim()}
+                className={`retro-button px-12 py-4 border-4 bg-black font-bold text-2xl transition-all ${
+                  playerName.trim()
+                    ? 'border-green-400 text-green-400 hover:bg-green-400 hover:text-black cursor-pointer'
+                    : 'border-green-400/30 text-green-400/30 cursor-not-allowed'
+                }`}
+                style={{
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.2em'
+                }}
+                aria-label="Start new game"
+              >
+                START GAME
+              </button>
+
+              {/* Touch Controls Info for Mobile */}
+              <div className="mt-6 text-green-400 text-sm md:hidden" style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}>
+                TOUCH: Move ship • TAP: Fire
+              </div>
+
+              {/* Retro decoration */}
+              <div className="mt-8 text-green-400/50 text-xs" style={{ fontFamily: 'monospace' }}>
+                © 1982 CLASSIC ARCADE
+              </div>
+            </div>
+
+            {/* Right Column - Leaderboard Preview */}
+            <div className="flex flex-col items-center justify-center">
+              <div className="w-full max-w-md">
+                <Leaderboard entries={leaderboardEntries} maxEntries={5} />
+                
+                {/* View Full Leaderboard Button */}
+                <button
+                  onClick={() => setShowLeaderboard(true)}
+                  className="w-full mt-4 retro-button px-6 py-3 border-4 border-cyan-400 bg-black text-cyan-400 font-bold text-lg hover:bg-cyan-400 hover:text-black transition-all"
+                  style={{
+                    fontFamily: 'monospace',
+                    letterSpacing: '0.15em'
+                  }}
+                >
+                  VIEW FULL LEADERBOARD
+                </button>
+              </div>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Instructions Box - Retro Style */}
-          <div className="retro-box mb-8 p-6 border-4 border-green-400 bg-black max-w-md">
-            <h2 className="text-green-400 text-xl font-bold mb-4 text-center" style={{
-              fontFamily: 'monospace',
-              letterSpacing: '0.15em'
-            }}>
-              CONTROLS
-            </h2>
-            <div className="text-green-400 space-y-2" style={{ fontFamily: 'monospace' }}>
-              <div className="flex justify-between items-center border-b border-green-400/30 pb-2">
-                <span>MOVE LEFT</span>
-                <span className="font-bold">← or A</span>
-              </div>
-              <div className="flex justify-between items-center border-b border-green-400/30 pb-2">
-                <span>MOVE RIGHT</span>
-                <span className="font-bold">→ or D</span>
-              </div>
-              <div className="flex justify-between items-center pb-2">
-                <span>FIRE</span>
-                <span className="font-bold">SPACE</span>
+      {/* Full Leaderboard Screen */}
+      {showLeaderboard && !gameStarted && !gameOver && (
+        <div className="absolute inset-0 flex items-center justify-center z-20 px-4 overflow-y-auto py-8">
+          <div className="max-w-3xl w-full">
+            <div className="mb-8">
+              <h1 className="text-5xl font-bold text-green-400 text-center mb-4" style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.2em',
+                textTransform: 'uppercase'
+              }}>
+                HALL OF FAME
+              </h1>
+              <div className="flex justify-center gap-2">
+                <div className="w-3 h-3 bg-green-400"></div>
+                <div className="w-3 h-3 bg-green-400"></div>
+                <div className="w-3 h-3 bg-green-400"></div>
               </div>
             </div>
-          </div>
 
-          {/* Start Button - Retro Style */}
-          <button
-            onClick={startGame}
-            className="retro-button px-12 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-2xl hover:bg-green-400 hover:text-black transition-all"
-            style={{
-              fontFamily: 'monospace',
-              letterSpacing: '0.2em'
-            }}
-            aria-label="Start new game"
-            autoFocus
-          >
-            START GAME
-          </button>
+            <Leaderboard entries={leaderboardEntries} maxEntries={10} showTitle={false} />
 
-          {/* Touch Controls Info for Mobile */}
-          <div className="mt-6 text-green-400 text-sm md:hidden" style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}>
-            TOUCH: Move ship • TAP: Fire
-          </div>
-
-          {/* Retro decoration */}
-          <div className="mt-8 text-green-400/50 text-xs" style={{ fontFamily: 'monospace' }}>
-            © 1982 CLASSIC ARCADE
+            <button
+              onClick={() => setShowLeaderboard(false)}
+              className="w-full mt-6 retro-button px-8 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-xl hover:bg-green-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.15em'
+              }}
+            >
+              BACK TO MENU
+            </button>
           </div>
         </div>
       )}
 
       {/* Game Over Screen - Retro Style */}
       {gameOver && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4">
-          <div className="retro-box border-4 border-red-500 bg-black p-12 max-w-lg">
-            <h2 className="text-6xl font-bold text-red-500 mb-6 text-center" style={{
-              fontFamily: 'monospace',
-              letterSpacing: '0.2em'
-            }}>
-              GAME OVER
-            </h2>
-            
-            <div className="border-4 border-red-500/50 bg-black p-6 mb-8">
-              <div className="text-green-400 text-center mb-2" style={{ fontFamily: 'monospace' }}>
-                FINAL SCORE
-              </div>
-              <div className="text-5xl font-bold text-green-400 text-center" style={{ fontFamily: 'monospace' }}>
-                {score.toString().padStart(6, '0')}
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4 overflow-y-auto py-8">
+          <div className="max-w-4xl w-full grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Left Column - Game Over Info */}
+            <div className="flex items-center justify-center">
+              <div className="retro-box border-4 border-red-500 bg-black p-12 w-full max-w-lg">
+                <h2 className="text-6xl font-bold text-red-500 mb-6 text-center" style={{
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.2em'
+                }}>
+                  GAME OVER
+                </h2>
+                
+                <div className="border-4 border-red-500/50 bg-black p-6 mb-4">
+                  <div className="text-green-400 text-center mb-2" style={{ fontFamily: 'monospace' }}>
+                    PLAYER
+                  </div>
+                  <div className="text-3xl font-bold text-green-400 text-center mb-4" style={{ fontFamily: 'monospace' }}>
+                    {playerName}
+                  </div>
+                  <div className="text-green-400 text-center mb-2" style={{ fontFamily: 'monospace' }}>
+                    FINAL SCORE
+                  </div>
+                  <div className="text-5xl font-bold text-green-400 text-center mb-2" style={{ fontFamily: 'monospace' }}>
+                    {score.toString().padStart(6, '0')}
+                  </div>
+                  <div className="text-green-400 text-center text-sm" style={{ fontFamily: 'monospace' }}>
+                    WAVE {wave}
+                  </div>
+                </div>
+
+                {isLeaderboardScore(score) && (
+                  <div className="mb-6 p-4 border-2 border-yellow-400 bg-yellow-400/10">
+                    <div className="text-yellow-400 text-center font-bold animate-pulse" style={{ fontFamily: 'monospace' }}>
+                      🏆 NEW HIGH SCORE! 🏆
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <button
+                    onClick={startGame}
+                    className="w-full retro-button px-8 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-xl hover:bg-green-400 hover:text-black transition-all"
+                    style={{
+                      fontFamily: 'monospace',
+                      letterSpacing: '0.15em'
+                    }}
+                  >
+                    PLAY AGAIN
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setGameOver(false);
+                      setShowLeaderboard(false);
+                    }}
+                    className="w-full retro-button px-8 py-4 border-4 border-cyan-400 bg-black text-cyan-400 font-bold text-xl hover:bg-cyan-400 hover:text-black transition-all"
+                    style={{
+                      fontFamily: 'monospace',
+                      letterSpacing: '0.15em'
+                    }}
+                  >
+                    BACK TO MENU
+                  </button>
+                </div>
               </div>
             </div>
 
-            <button
-              onClick={startGame}
-              className="w-full retro-button px-8 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-xl hover:bg-green-400 hover:text-black transition-all"
-              style={{
-                fontFamily: 'monospace',
-                letterSpacing: '0.15em'
-              }}
-            >
-              PLAY AGAIN
-            </button>
+            {/* Right Column - Leaderboard */}
+            <div className="flex items-center justify-center">
+              <div className="w-full max-w-lg">
+                <Leaderboard 
+                  entries={leaderboardEntries} 
+                  maxEntries={10} 
+                  highlightScore={score}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}
