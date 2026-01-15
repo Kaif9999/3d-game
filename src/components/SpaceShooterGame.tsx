@@ -1,9 +1,12 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import audioManager from '@/utils/audioManager';
 import * as CONSTANTS from '@/lib/gameConstants';
 import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps } from '@/lib/types';
 import { powerUpTypeToStateKey, getPowerUpDisplayName, getPowerUpColor } from '@/lib/powerUpUtils';
+import Leaderboard from './Leaderboard';
+import { getLeaderboard, addToLeaderboard } from '@/lib/leaderboardUtils';
+import type { LeaderboardEntry } from '@/lib/types';
 
 interface SpaceShooterGameProps {}
 
@@ -25,8 +28,6 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   });
   const [lives, setLives] = useState(CONSTANTS.INITIAL_LIVES);
   const [playerX, setPlayerX] = useState(CONSTANTS.PLAYER_START_X);
-  const [volumeMusic, setVolumeMusic] = useState(CONSTANTS.BACKGROUND_MUSIC_VOLUME);
-  const [volumeSFX, setVolumeSFX] = useState(CONSTANTS.SFX_VOLUME);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [aliens, setAliens] = useState<Alien[]>([]);
@@ -36,16 +37,16 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [particles, setParticles] = useState<Particle[]>([]);
   const [stars, setStars] = useState<Star[]>([]);
   const [isMuted, setIsMuted] = useState(false);
-  const [level, setLevel] = useState(1);
-  const [enemiesKilledInLevel, setEnemiesKilledInLevel] = useState(0);
-  const [levelComplete, setLevelComplete] = useState(false);
-  const [gameWon, setGameWon] = useState(false);
   const [combo, setCombo] = useState(0);
   const [lastKillTime, setLastKillTime] = useState(0);
   const [screenShake, setScreenShake] = useState(0);
   const [scoreMultiplier, setScoreMultiplier] = useState(1);
   const [timeSlowActive, setTimeSlowActive] = useState(false);
   const [wave, setWave] = useState(1);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [playerName, setPlayerName] = useState('');
+  const [submittingScore, setSubmittingScore] = useState(false);
   
   // Power-up states
   const [activePowerUps, setActivePowerUps] = useState<ActivePowerUps>({
@@ -106,6 +107,10 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       });
     }
     setStars(initialStars);
+  }, []);
+
+  useEffect(() => {
+    setLeaderboard(getLeaderboard());
   }, []);
 
   // Safe audio manager wrapper
@@ -188,23 +193,6 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       default:
         return { health: 1, speed: 0.4, points: 100 };
     }
-  };
-
-  // Level configuration
-  const getLevelConfig = (level: number) => {
-    const configs = [
-      { enemies: 10, types: [EnemyType.BASIC], spawnDelay: 2000, description: "Basic Training" },
-      { enemies: 15, types: [EnemyType.BASIC, EnemyType.FAST], spawnDelay: 1800, description: "Speed Challenge" },
-      { enemies: 20, types: [EnemyType.BASIC, EnemyType.TANK], spawnDelay: 1600, description: "Heavy Resistance" },
-      { enemies: 25, types: [EnemyType.BASIC, EnemyType.ZIGZAG], spawnDelay: 1400, description: "Evasive Maneuvers" },
-      { enemies: 30, types: [EnemyType.BASIC, EnemyType.SHOOTER], spawnDelay: 1200, description: "Under Fire" },
-      { enemies: 35, types: [EnemyType.FAST, EnemyType.ZIGZAG], spawnDelay: 1000, description: "Chaos Mode" },
-      { enemies: 40, types: [EnemyType.TANK, EnemyType.SHOOTER], spawnDelay: 900, description: "Heavy Artillery" },
-      { enemies: 45, types: [EnemyType.FAST, EnemyType.SHOOTER, EnemyType.ZIGZAG], spawnDelay: 800, description: "Elite Forces" },
-      { enemies: 50, types: [EnemyType.BASIC, EnemyType.FAST, EnemyType.TANK, EnemyType.ZIGZAG, EnemyType.SHOOTER], spawnDelay: 700, description: "Final Assault" },
-      { enemies: 1, types: [EnemyType.BOSS], spawnDelay: 5000, description: "Boss Battle" }
-    ];
-    return configs[Math.min(level - 1, configs.length - 1)];
   };
 
   // Handle keyboard input
@@ -654,10 +642,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               audioManager.stopBackgroundMusic();
               audioManager.playSound('gameOver');
               
-              // Update high score
-              if (score > highScore) {
-                setHighScore(score);
-                localStorage.setItem('spaceShooterHighScore', score.toString());
+              const currentLeaderboard = getLeaderboard();
+              if (score > 0 && (currentLeaderboard.length < 10 || score > currentLeaderboard[currentLeaderboard.length - 1].score)) {
+                setSubmittingScore(true);
               }
             }
             return newLives;
@@ -789,6 +776,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setGamePaused(false);
     setGameStarted(false);
     setGameOver(false);
+    setSubmittingScore(false);
     audioManager.stopBackgroundMusic();
     // Reset game state
     setScore(0);
@@ -817,6 +805,17 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       scoreMultiplier: 0,
       extraLife: 0
     });
+  };
+
+  const handleScoreSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (playerName.trim()) {
+      addToLeaderboard({ name: playerName.trim(), score });
+      setLeaderboard(getLeaderboard());
+      setSubmittingScore(false);
+      setGameOver(false);
+      setPlayerName('');
+    }
   };
 
   // Touch controls for mobile
@@ -917,123 +916,125 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       ))}
 
       {/* HUD */}
-      <div className="absolute top-4 left-4 right-4 z-10">
-        {/* Frosted black background behind header */}
-        <div className="absolute inset-0 -mx-4 -mt-4 bg-black/70 backdrop-blur-sm rounded-b-lg border-b border-white/10" style={{ height: 'calc(100% + 4px)' }}></div>
-        
-        <div className="relative flex justify-between items-center">
-          <div className="flex gap-2 items-center">
-            {[...Array(3)].map((_, i) => (
-              <div
-                key={i}
-                className={`life ${i < lives ? 'active' : ''}`}
-                style={{ opacity: i < lives ? 1 : 0.3 }}
-              />
-            ))}
-            {/* Mute button */}
-            <button
-              onClick={() => {
-                const newMuted = audioManager.toggleMute();
-                setIsMuted(newMuted);
-              }}
-              className="ml-4 px-3 py-1 border-2 border-green-400 bg-black text-green-400 font-mono text-sm hover:bg-green-400 hover:text-black transition-all"
-              style={{ letterSpacing: '0.1em' }}
-              aria-label={isMuted ? 'Unmute sound' : 'Mute sound'}
-              aria-pressed={isMuted}
-            >
-              {isMuted ? 'UNMUTE' : 'MUTE'}
-            </button>
-
-            {/* Pause button */}
-            {gameStarted && !gameOver && (
+      {gameStarted && (
+        <div className="absolute top-4 left-4 right-4 z-10">
+          {/* Frosted black background behind header */}
+          <div className="absolute inset-0 -mx-4 -mt-4 bg-black/70 backdrop-blur-sm rounded-b-lg border-b border-white/10" style={{ height: 'calc(100% + 4px)' }}></div>
+          
+          <div className="relative flex justify-between items-center">
+            <div className="flex gap-2 items-center">
+              {[...Array(3)].map((_, i) => (
+                <div
+                  key={i}
+                  className={`life ${i < lives ? 'active' : ''}`}
+                  style={{ opacity: i < lives ? 1 : 0.3 }}
+                />
+              ))}
+              {/* Mute button */}
               <button
-                onClick={togglePause}
-                className="ml-2 px-3 py-1 border-2 border-cyan-400 bg-black text-cyan-400 font-mono text-sm hover:bg-cyan-400 hover:text-black transition-all"
+                onClick={() => {
+                  const newMuted = audioManager.toggleMute();
+                  setIsMuted(newMuted);
+                }}
+                className="ml-4 px-3 py-1 border-2 border-green-400 bg-black text-green-400 font-mono text-sm hover:bg-green-400 hover:text-black transition-all"
                 style={{ letterSpacing: '0.1em' }}
-                aria-label={gamePaused ? 'Resume game' : 'Pause game'}
-                aria-pressed={gamePaused}
+                aria-label={isMuted ? 'Unmute sound' : 'Mute sound'}
+                aria-pressed={isMuted}
               >
-                {gamePaused ? 'RESUME' : 'PAUSE'}
+                {isMuted ? 'UNMUTE' : 'MUTE'}
               </button>
+
+              {/* Pause button */}
+              {gameStarted && !gameOver && (
+                <button
+                  onClick={togglePause}
+                  className="ml-2 px-3 py-1 border-2 border-cyan-400 bg-black text-cyan-400 font-mono text-sm hover:bg-cyan-400 hover:text-black transition-all"
+                  style={{ letterSpacing: '0.1em' }}
+                  aria-label={gamePaused ? 'Resume game' : 'Pause game'}
+                  aria-pressed={gamePaused}
+                >
+                  {gamePaused ? 'RESUME' : 'PAUSE'}
+                </button>
+              )}
+            </div>
+            
+            <div className="flex gap-4 items-center">
+              {/* Wave indicator */}
+              <div className="text-green-400 font-mono text-lg">
+                WAVE: {wave}
+              </div>
+              
+              {/* Combo indicator */}
+              {combo > 1 && (
+                <div className="text-yellow-400 font-mono text-lg animate-pulse">
+                  COMBO x{combo}
+                </div>
+              )}
+              
+              {/* Score */}
+              <div className="score-display text-2xl font-bold px-4 py-2">
+                SCORE: {score.toString().padStart(6, '0')}
+              </div>
+            </div>
+          </div>
+          
+          {/* Power-up indicators */}
+          <div className="flex gap-2 mt-2 justify-end flex-wrap">
+            {activePowerUps.doubleShot > Date.now() && (
+              <div className="px-2 py-1 bg-blue-500 text-white font-mono text-xs" role="status" aria-live="polite">
+                DOUBLE SHOT: {Math.ceil((activePowerUps.doubleShot - Date.now()) / 1000)}s
+              </div>
+            )}
+            {activePowerUps.tripleShot > Date.now() && (
+              <div className="px-2 py-1 bg-purple-500 text-white font-mono text-xs" role="status" aria-live="polite">
+                TRIPLE SHOT: {Math.ceil((activePowerUps.tripleShot - Date.now()) / 1000)}s
+              </div>
+            )}
+            {activePowerUps.shield > Date.now() && (
+              <div className="px-2 py-1 bg-green-500 text-white font-mono text-xs" role="status" aria-live="polite">
+                SHIELD: {Math.ceil((activePowerUps.shield - Date.now()) / 1000)}s
+              </div>
+            )}
+            {activePowerUps.speedBoost > Date.now() && (
+              <div className="px-2 py-1 bg-yellow-500 text-white font-mono text-xs" role="status" aria-live="polite">
+                SPEED: {Math.ceil((activePowerUps.speedBoost - Date.now()) / 1000)}s
+              </div>
+            )}
+            {activePowerUps.rapidFire > Date.now() && (
+              <div className="px-2 py-1 bg-red-500 text-white font-mono text-xs" role="status" aria-live="polite">
+                RAPID FIRE: {Math.ceil((activePowerUps.rapidFire - Date.now()) / 1000)}s
+              </div>
+            )}
+            {activePowerUps.laserBeam > Date.now() && (
+              <div className="px-2 py-1 bg-green-500 text-white font-mono text-xs" role="status" aria-live="polite">
+                LASER BEAM: {Math.ceil((activePowerUps.laserBeam - Date.now()) / 1000)}s
+              </div>
+            )}
+            {activePowerUps.homingMissile > Date.now() && (
+              <div className="px-2 py-1 bg-orange-500 text-white font-mono text-xs" role="status" aria-live="polite">
+                HOMING: {Math.ceil((activePowerUps.homingMissile - Date.now()) / 1000)}s
+              </div>
+            )}
+            {activePowerUps.timeSlow > Date.now() && (
+              <div className="px-2 py-1 bg-indigo-500 text-white font-mono text-xs" role="status" aria-live="polite">
+                TIME SLOW: {Math.ceil((activePowerUps.timeSlow - Date.now()) / 1000)}s
+              </div>
+            )}
+            {activePowerUps.scoreMultiplier > Date.now() && (
+              <div className="px-2 py-1 bg-pink-500 text-white font-mono text-xs" role="status" aria-live="polite">
+                {scoreMultiplier}x SCORE: {Math.ceil((activePowerUps.scoreMultiplier - Date.now()) / 1000)}s
+              </div>
             )}
           </div>
           
-          <div className="flex gap-4 items-center">
-            {/* Wave indicator */}
-            <div className="text-green-400 font-mono text-lg">
-              WAVE: {wave}
-            </div>
-            
-            {/* Combo indicator */}
-            {combo > 1 && (
-              <div className="text-yellow-400 font-mono text-lg animate-pulse">
-                COMBO x{combo}
-              </div>
-            )}
-            
-            {/* Score */}
-            <div className="score-display text-2xl font-bold px-4 py-2">
-              SCORE: {score.toString().padStart(6, '0')}
-            </div>
-          </div>
-        </div>
-        
-        {/* Power-up indicators */}
-        <div className="flex gap-2 mt-2 justify-end flex-wrap">
-          {activePowerUps.doubleShot > Date.now() && (
-            <div className="px-2 py-1 bg-blue-500 text-white font-mono text-xs" role="status" aria-live="polite">
-              DOUBLE SHOT: {Math.ceil((activePowerUps.doubleShot - Date.now()) / 1000)}s
-            </div>
-          )}
-          {activePowerUps.tripleShot > Date.now() && (
-            <div className="px-2 py-1 bg-purple-500 text-white font-mono text-xs" role="status" aria-live="polite">
-              TRIPLE SHOT: {Math.ceil((activePowerUps.tripleShot - Date.now()) / 1000)}s
-            </div>
-          )}
-          {activePowerUps.shield > Date.now() && (
-            <div className="px-2 py-1 bg-green-500 text-white font-mono text-xs" role="status" aria-live="polite">
-              SHIELD: {Math.ceil((activePowerUps.shield - Date.now()) / 1000)}s
-            </div>
-          )}
-          {activePowerUps.speedBoost > Date.now() && (
-            <div className="px-2 py-1 bg-yellow-500 text-white font-mono text-xs" role="status" aria-live="polite">
-              SPEED: {Math.ceil((activePowerUps.speedBoost - Date.now()) / 1000)}s
-            </div>
-          )}
-          {activePowerUps.rapidFire > Date.now() && (
-            <div className="px-2 py-1 bg-red-500 text-white font-mono text-xs" role="status" aria-live="polite">
-              RAPID FIRE: {Math.ceil((activePowerUps.rapidFire - Date.now()) / 1000)}s
-            </div>
-          )}
-          {activePowerUps.laserBeam > Date.now() && (
-            <div className="px-2 py-1 bg-green-500 text-white font-mono text-xs" role="status" aria-live="polite">
-              LASER BEAM: {Math.ceil((activePowerUps.laserBeam - Date.now()) / 1000)}s
-            </div>
-          )}
-          {activePowerUps.homingMissile > Date.now() && (
-            <div className="px-2 py-1 bg-orange-500 text-white font-mono text-xs" role="status" aria-live="polite">
-              HOMING: {Math.ceil((activePowerUps.homingMissile - Date.now()) / 1000)}s
-            </div>
-          )}
-          {activePowerUps.timeSlow > Date.now() && (
-            <div className="px-2 py-1 bg-indigo-500 text-white font-mono text-xs" role="status" aria-live="polite">
-              TIME SLOW: {Math.ceil((activePowerUps.timeSlow - Date.now()) / 1000)}s
-            </div>
-          )}
-          {activePowerUps.scoreMultiplier > Date.now() && (
-            <div className="px-2 py-1 bg-pink-500 text-white font-mono text-xs" role="status" aria-live="polite">
-              {scoreMultiplier}x SCORE: {Math.ceil((activePowerUps.scoreMultiplier - Date.now()) / 1000)}s
+          {/* High score */}
+          {highScore > 0 && (
+            <div className="text-center mt-2 text-green-400 font-mono text-sm">
+              HIGH SCORE: {highScore.toString().padStart(6, '0')}
             </div>
           )}
         </div>
-        
-        {/* High score */}
-        {highScore > 0 && (
-          <div className="text-center mt-2 text-green-400 font-mono text-sm">
-            HIGH SCORE: {highScore.toString().padStart(6, '0')}
-          </div>
-        )}
-      </div>
+      )}
       
       {/* Pause Menu */}
       {gamePaused && gameStarted && !gameOver && (
@@ -1231,8 +1232,11 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         />
       ))}
 
+      {/* Leaderboard Screen */}
+      {showLeaderboard && <Leaderboard onBack={() => setShowLeaderboard(false)} />}
+
       {/* Start Screen - Retro Style */}
-      {!gameStarted && !gameOver && (
+      {!gameStarted && !gameOver && !showLeaderboard && !submittingScore && (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4">
           {/* Retro Title */}
           <div className="text-center mb-12">
@@ -1257,87 +1261,111 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
             </div>
           </div>
 
-          {/* Instructions Box - Retro Style */}
-          <div className="retro-box mb-8 p-6 border-4 border-green-400 bg-black max-w-md">
-            <h2 className="text-green-400 text-xl font-bold mb-4 text-center" style={{
-              fontFamily: 'monospace',
-              letterSpacing: '0.15em'
-            }}>
-              CONTROLS
-            </h2>
-            <div className="text-green-400 space-y-2" style={{ fontFamily: 'monospace' }}>
-              <div className="flex justify-between items-center border-b border-green-400/30 pb-2">
-                <span>MOVE LEFT</span>
-                <span className="font-bold">← or A</span>
-              </div>
-              <div className="flex justify-between items-center border-b border-green-400/30 pb-2">
-                <span>MOVE RIGHT</span>
-                <span className="font-bold">→ or D</span>
-              </div>
-              <div className="flex justify-between items-center pb-2">
-                <span>FIRE</span>
-                <span className="font-bold">SPACE</span>
-              </div>
-            </div>
+          {/* Start and Leaderboard Buttons */}
+          <div className="flex flex-col gap-4 mb-8">
+            <button
+              onClick={startGame}
+              className="retro-button px-12 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-2xl hover:bg-green-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.2em'
+              }}
+              aria-label="Start new game"
+              autoFocus
+            >
+              START GAME
+            </button>
+            <button
+              onClick={() => setShowLeaderboard(true)}
+              className="retro-button px-12 py-4 border-4 border-cyan-400 bg-black text-cyan-400 font-bold text-2xl hover:bg-cyan-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.2em'
+              }}
+              aria-label="View leaderboard"
+            >
+              LEADERBOARD
+            </button>
           </div>
 
-          {/* Start Button - Retro Style */}
-          <button
-            onClick={startGame}
-            className="retro-button px-12 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-2xl hover:bg-green-400 hover:text-black transition-all"
-            style={{
-              fontFamily: 'monospace',
-              letterSpacing: '0.2em'
-            }}
-            aria-label="Start new game"
-            autoFocus
-          >
-            START GAME
-          </button>
-
-          {/* Touch Controls Info for Mobile */}
-          <div className="mt-6 text-green-400 text-sm md:hidden" style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}>
-            TOUCH: Move ship • TAP: Fire
-          </div>
-
-          {/* Retro decoration */}
-          <div className="mt-8 text-green-400/50 text-xs" style={{ fontFamily: 'monospace' }}>
-            © 1982 CLASSIC ARCADE
+          {/* Mini Leaderboard on Start Screen */}
+          <div className="w-full max-w-md p-4 border-2 border-green-400/50 bg-black/50">
+            <h3 className="text-center text-green-400 font-mono mb-2">TOP SCORES</h3>
+            {leaderboard.length > 0 ? (
+              leaderboard.slice(0, 3).map((entry, index) => (
+                <div key={index} className="flex justify-between text-green-400/80 font-mono text-sm">
+                  <span>{index + 1}. {entry.name}</span>
+                  <span>{entry.score}</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-green-400/60 font-mono text-sm">No scores yet!</p>
+            )}
           </div>
         </div>
       )}
 
-      {/* Game Over Screen - Retro Style */}
+      {/* Game Over and Score Submission */}
       {gameOver && (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4">
-          <div className="retro-box border-4 border-red-500 bg-black p-12 max-w-lg">
-            <h2 className="text-6xl font-bold text-red-500 mb-6 text-center" style={{
-              fontFamily: 'monospace',
-              letterSpacing: '0.2em'
-            }}>
-              GAME OVER
-            </h2>
-            
-            <div className="border-4 border-red-500/50 bg-black p-6 mb-8">
-              <div className="text-green-400 text-center mb-2" style={{ fontFamily: 'monospace' }}>
-                FINAL SCORE
-              </div>
-              <div className="text-5xl font-bold text-green-400 text-center" style={{ fontFamily: 'monospace' }}>
+          {submittingScore ? (
+            <div className="retro-box border-4 border-yellow-500 bg-black p-12 max-w-lg">
+              <h2 className="text-4xl font-bold text-yellow-500 mb-4 text-center" style={{ fontFamily: 'monospace' }}>
+                NEW HIGH SCORE!
+              </h2>
+              <div className="text-5xl font-bold text-green-400 text-center mb-6" style={{ fontFamily: 'monospace' }}>
                 {score.toString().padStart(6, '0')}
               </div>
+              <form onSubmit={handleScoreSubmit}>
+                <input
+                  type="text"
+                  value={playerName}
+                  onChange={(e) => setPlayerName(e.target.value.slice(0, 10))}
+                  placeholder="ENTER YOUR NAME"
+                  maxLength={10}
+                  className="w-full bg-black border-4 border-green-400 text-green-400 text-center p-2 text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-green-300"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  className="w-full mt-4 retro-button px-8 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-xl hover:bg-green-400 hover:text-black transition-all"
+                  style={{ fontFamily: 'monospace', letterSpacing: '0.15em' }}
+                >
+                  SUBMIT SCORE
+                </button>
+              </form>
             </div>
-
-            <button
-              onClick={startGame}
-              className="w-full retro-button px-8 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-xl hover:bg-green-400 hover:text-black transition-all"
-              style={{
-                fontFamily: 'monospace',
-                letterSpacing: '0.15em'
-              }}
-            >
-              PLAY AGAIN
-            </button>
-          </div>
+          ) : (
+            <div className="retro-box border-4 border-red-500 bg-black p-12 max-w-lg">
+              <h2 className="text-6xl font-bold text-red-500 mb-6 text-center" style={{ fontFamily: 'monospace', letterSpacing: '0.2em' }}>
+                GAME OVER
+              </h2>
+              <div className="border-4 border-red-500/50 bg-black p-6 mb-8">
+                <div className="text-green-400 text-center mb-2" style={{ fontFamily: 'monospace' }}>
+                  FINAL SCORE
+                </div>
+                <div className="text-5xl font-bold text-green-400 text-center" style={{ fontFamily: 'monospace' }}>
+                  {score.toString().padStart(6, '0')}
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <button
+                  onClick={startGame}
+                  className="w-full retro-button px-8 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-xl hover:bg-green-400 hover:text-black transition-all"
+                  style={{ fontFamily: 'monospace', letterSpacing: '0.15em' }}
+                >
+                  PLAY AGAIN
+                </button>
+                <button
+                  onClick={() => setShowLeaderboard(true)}
+                  className="w-full retro-button px-8 py-4 border-4 border-cyan-400 bg-black text-cyan-400 font-bold text-xl hover:bg-cyan-400 hover:text-black transition-all"
+                  style={{ fontFamily: 'monospace', letterSpacing: '0.15em' }}
+                >
+                  LEADERBOARD
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
