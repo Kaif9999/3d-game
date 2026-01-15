@@ -2,8 +2,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import audioManager from '@/utils/audioManager';
 import * as CONSTANTS from '@/lib/gameConstants';
-import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps } from '@/lib/types';
+import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps, type Score } from '@/lib/types';
 import { powerUpTypeToStateKey, getPowerUpDisplayName, getPowerUpColor } from '@/lib/powerUpUtils';
+import Leaderboard from './Leaderboard';
 
 interface SpaceShooterGameProps {}
 
@@ -46,6 +47,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [scoreMultiplier, setScoreMultiplier] = useState(1);
   const [timeSlowActive, setTimeSlowActive] = useState(false);
   const [wave, setWave] = useState(1);
+  const [playerName, setPlayerName] = useState('');
   
   // Power-up states
   const [activePowerUps, setActivePowerUps] = useState<ActivePowerUps>({
@@ -658,6 +660,13 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               if (score > highScore) {
                 setHighScore(score);
                 localStorage.setItem('spaceShooterHighScore', score.toString());
+              }
+
+              if (playerName) {
+                const newScore: Score = { name: playerName, score };
+                const scores = JSON.parse(localStorage.getItem('scores') || '[]');
+                scores.push(newScore);
+                localStorage.setItem('scores', JSON.stringify(scores));
               }
             }
             return newLives;
@@ -1304,6 +1313,10 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           <div className="mt-8 text-green-400/50 text-xs" style={{ fontFamily: 'monospace' }}>
             © 1982 CLASSIC ARCADE
           </div>
+
+          <div className="mt-8 w-full max-w-md">
+            <Leaderboard />
+          </div>
         </div>
       )}
 
@@ -1325,6 +1338,28 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               <div className="text-5xl font-bold text-green-400 text-center" style={{ fontFamily: 'monospace' }}>
                 {score.toString().padStart(6, '0')}
               </div>
+            </div>
+
+            <div className="flex flex-col items-center mb-8">
+              <input
+                type="text"
+                placeholder="ENTER YOUR NAME"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                className="w-full retro-input px-4 py-2 border-2 border-green-400 bg-black text-green-400 font-mono text-lg text-center"
+              />
+              <button
+                onClick={() => {
+                  const newScore: Score = { name: playerName, score };
+                  const scores = JSON.parse(localStorage.getItem('scores') || '[]');
+                  scores.push(newScore);
+                  localStorage.setItem('scores', JSON.stringify(scores));
+                  setPlayerName('');
+                }}
+                className="w-full retro-button px-8 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-xl hover:bg-green-400 hover:text-black transition-all mt-4"
+              >
+                SUBMIT SCORE
+              </button>
             </div>
 
             <button
