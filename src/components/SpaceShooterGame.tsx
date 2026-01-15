@@ -4,6 +4,8 @@ import audioManager from '@/utils/audioManager';
 import * as CONSTANTS from '@/lib/gameConstants';
 import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps } from '@/lib/types';
 import { powerUpTypeToStateKey, getPowerUpDisplayName, getPowerUpColor } from '@/lib/powerUpUtils';
+import { addLeaderboardEntry } from '@/lib/leaderboard';
+import Leaderboard from './Leaderboard';
 
 interface SpaceShooterGameProps {}
 
@@ -11,6 +13,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [gameStarted, setGameStarted] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [gamePaused, setGamePaused] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [playerName, setPlayerName] = useState('');
+  const [playerRank, setPlayerRank] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -659,6 +664,12 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
                 setHighScore(score);
                 localStorage.setItem('spaceShooterHighScore', score.toString());
               }
+              
+              // Save to leaderboard
+              const result = addLeaderboardEntry(playerName || 'Anonymous', score, wave);
+              if (result.isTopTen) {
+                setPlayerRank(result.rank);
+              }
             }
             return newLives;
           });
@@ -737,6 +748,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setGameStarted(true);
     setGameOver(false);
     setGamePaused(false);
+    setShowLeaderboard(false);
+    setPlayerRank(null);
     setScore(0);
     setLives(CONSTANTS.INITIAL_LIVES);
     setPlayerX(CONSTANTS.PLAYER_START_X);
@@ -789,6 +802,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setGamePaused(false);
     setGameStarted(false);
     setGameOver(false);
+    setShowLeaderboard(false);
+    setPlayerRank(null);
     audioManager.stopBackgroundMusic();
     // Reset game state
     setScore(0);
@@ -1232,10 +1247,10 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       ))}
 
       {/* Start Screen - Retro Style */}
-      {!gameStarted && !gameOver && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4">
+      {!gameStarted && !gameOver && !showLeaderboard && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4 overflow-y-auto py-8">
           {/* Retro Title */}
-          <div className="text-center mb-12">
+          <div className="text-center mb-8">
             <h1 className="retro-title text-7xl font-bold mb-4 text-green-400" style={{
               fontFamily: 'monospace',
               letterSpacing: '0.2em',
@@ -1257,8 +1272,32 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
             </div>
           </div>
 
+          {/* Player Name Input */}
+          <div className="retro-box mb-6 p-6 border-4 border-yellow-400 bg-black max-w-md w-full">
+            <h2 className="text-yellow-400 text-xl font-bold mb-4 text-center" style={{
+              fontFamily: 'monospace',
+              letterSpacing: '0.15em'
+            }}>
+              ENTER YOUR NAME
+            </h2>
+            <input
+              type="text"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value.slice(0, 20))}
+              placeholder="ANONYMOUS"
+              maxLength={20}
+              className="w-full px-4 py-3 bg-black border-2 border-yellow-400 text-yellow-400 font-mono text-lg text-center focus:outline-none focus:border-green-400 transition-colors"
+              style={{ letterSpacing: '0.1em' }}
+            />
+          </div>
+
+          {/* Leaderboard Preview */}
+          <div className="mb-6">
+            <Leaderboard compact maxEntries={5} />
+          </div>
+
           {/* Instructions Box - Retro Style */}
-          <div className="retro-box mb-8 p-6 border-4 border-green-400 bg-black max-w-md">
+          <div className="retro-box mb-6 p-6 border-4 border-green-400 bg-black max-w-md w-full">
             <h2 className="text-green-400 text-xl font-bold mb-4 text-center" style={{
               fontFamily: 'monospace',
               letterSpacing: '0.15em'
@@ -1274,26 +1313,46 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
                 <span>MOVE RIGHT</span>
                 <span className="font-bold">→ or D</span>
               </div>
-              <div className="flex justify-between items-center pb-2">
+              <div className="flex justify-between items-center border-b border-green-400/30 pb-2">
                 <span>FIRE</span>
                 <span className="font-bold">SPACE</span>
+              </div>
+              <div className="flex justify-between items-center pb-2">
+                <span>PAUSE</span>
+                <span className="font-bold">ESC</span>
               </div>
             </div>
           </div>
 
-          {/* Start Button - Retro Style */}
-          <button
-            onClick={startGame}
-            className="retro-button px-12 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-2xl hover:bg-green-400 hover:text-black transition-all"
-            style={{
-              fontFamily: 'monospace',
-              letterSpacing: '0.2em'
-            }}
-            aria-label="Start new game"
-            autoFocus
-          >
-            START GAME
-          </button>
+          {/* Buttons */}
+          <div className="space-y-4 w-full max-w-md">
+            {/* Start Button - Retro Style */}
+            <button
+              onClick={startGame}
+              className="w-full retro-button px-12 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-2xl hover:bg-green-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.2em'
+              }}
+              aria-label="Start new game"
+              autoFocus
+            >
+              START GAME
+            </button>
+
+            {/* View Leaderboard Button */}
+            <button
+              onClick={() => setShowLeaderboard(true)}
+              className="w-full retro-button px-12 py-4 border-4 border-cyan-400 bg-black text-cyan-400 font-bold text-xl hover:bg-cyan-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.15em'
+              }}
+              aria-label="View full leaderboard"
+            >
+              VIEW LEADERBOARD
+            </button>
+          </div>
 
           {/* Touch Controls Info for Mobile */}
           <div className="mt-6 text-green-400 text-sm md:hidden" style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}>
@@ -1307,6 +1366,11 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         </div>
       )}
 
+      {/* Full Leaderboard Screen */}
+      {showLeaderboard && !gameStarted && !gameOver && (
+        <Leaderboard onBack={() => setShowLeaderboard(false)} />
+      )}
+
       {/* Game Over Screen - Retro Style */}
       {gameOver && (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-20 px-4">
@@ -1318,25 +1382,67 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               GAME OVER
             </h2>
             
-            <div className="border-4 border-red-500/50 bg-black p-6 mb-8">
+            <div className="border-4 border-red-500/50 bg-black p-6 mb-4">
               <div className="text-green-400 text-center mb-2" style={{ fontFamily: 'monospace' }}>
                 FINAL SCORE
               </div>
-              <div className="text-5xl font-bold text-green-400 text-center" style={{ fontFamily: 'monospace' }}>
+              <div className="text-5xl font-bold text-green-400 text-center mb-2" style={{ fontFamily: 'monospace' }}>
                 {score.toString().padStart(6, '0')}
+              </div>
+              <div className="text-purple-400 text-center text-sm" style={{ fontFamily: 'monospace' }}>
+                WAVE {wave}
               </div>
             </div>
 
-            <button
-              onClick={startGame}
-              className="w-full retro-button px-8 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-xl hover:bg-green-400 hover:text-black transition-all"
-              style={{
-                fontFamily: 'monospace',
-                letterSpacing: '0.15em'
-              }}
-            >
-              PLAY AGAIN
-            </button>
+            {/* Show rank if player made the leaderboard */}
+            {playerRank !== null && (
+              <div className="border-4 border-yellow-400 bg-black p-4 mb-8 animate-pulse">
+                <div className="text-yellow-400 text-center font-bold text-2xl" style={{ fontFamily: 'monospace' }}>
+                  🏆 RANK #{playerRank} 🏆
+                </div>
+                <div className="text-yellow-400/70 text-center text-sm mt-2" style={{ fontFamily: 'monospace' }}>
+                  YOU MADE THE LEADERBOARD!
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <button
+                onClick={startGame}
+                className="w-full retro-button px-8 py-4 border-4 border-green-400 bg-black text-green-400 font-bold text-xl hover:bg-green-400 hover:text-black transition-all"
+                style={{
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.15em'
+                }}
+              >
+                PLAY AGAIN
+              </button>
+
+              <button
+                onClick={() => {
+                  setGameOver(false);
+                  setShowLeaderboard(true);
+                }}
+                className="w-full retro-button px-8 py-4 border-4 border-cyan-400 bg-black text-cyan-400 font-bold text-xl hover:bg-cyan-400 hover:text-black transition-all"
+                style={{
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.15em'
+                }}
+              >
+                VIEW LEADERBOARD
+              </button>
+
+              <button
+                onClick={handleQuitToMenu}
+                className="w-full retro-button px-8 py-4 border-4 border-red-400 bg-black text-red-400 font-bold text-xl hover:bg-red-400 hover:text-black transition-all"
+                style={{
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.15em'
+                }}
+              >
+                MAIN MENU
+              </button>
+            </div>
           </div>
         </div>
       )}
