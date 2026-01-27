@@ -1,87 +1,10 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import audioManager from '@/utils/audioManager';
-
-// Constants
-const MAX_PARTICLES = 200;
-const MAX_STARS = 100;
-
-// Enemy types
-enum EnemyType {
-  BASIC = 'basic',
-  FAST = 'fast',
-  TANK = 'tank',
-  ZIGZAG = 'zigzag',
-  SHOOTER = 'shooter',
-  BOSS = 'boss'
-}
-
-// Power-up types
-enum PowerUpType {
-  DOUBLE_SHOT = 'double_shot',
-  TRIPLE_SHOT = 'triple_shot',
-  SHIELD = 'shield',
-  SPEED_BOOST = 'speed_boost',
-  RAPID_FIRE = 'rapid_fire',
-  LASER_BEAM = 'laser_beam',
-  HOMING_MISSILE = 'homing_missile',
-  TIME_SLOW = 'time_slow',
-  SCORE_MULTIPLIER = 'score_multiplier',
-  EXTRA_LIFE = 'extra_life'
-}
-
-interface Alien {
-  id: number;
-  x: number;
-  y: number;
-  speed: number;
-  type: EnemyType;
-  health: number;
-  maxHealth: number;
-  zigzagPhase?: number;
-  lastShot?: number;
-}
-
-interface Bullet {
-  id: number;
-  x: number;
-  y: number;
-  isPlayerBullet: boolean;
-  damage?: number;
-}
-
-interface PowerUp {
-  id: number;
-  x: number;
-  y: number;
-  type: PowerUpType;
-  speed: number;
-}
-
-interface Explosion {
-  id: number;
-  x: number;
-  y: number;
-}
-
-interface Particle {
-  id: number;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  color: string;
-}
-
-interface Star {
-  id: number;
-  x: number;
-  y: number;
-  size: number;
-  speed: number;
-  opacity: number;
-}
+import * as CONSTANTS from '@/lib/gameConstants';
+import { EnemyType, PowerUpType, type Alien, type Bullet, type PowerUp, type Explosion, type Particle, type Star, type ActivePowerUps, type LeaderboardEntry } from '@/lib/types';
+import { powerUpTypeToStateKey, getPowerUpDisplayName, getPowerUpColor } from '@/lib/powerUpUtils';
+import { leaderboardManager } from '@/utils/leaderboardManager';
 
 interface SpaceShooterGameProps {}
 
@@ -89,6 +12,10 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [gameStarted, setGameStarted] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [gamePaused, setGamePaused] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [playerName, setPlayerName] = useState('');
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -101,8 +28,12 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     }
     return 0;
   });
-  const [lives, setLives] = useState(3);
-  const [playerX, setPlayerX] = useState(50);
+  const [lives, setLives] = useState(CONSTANTS.INITIAL_LIVES);
+  const [playerX, setPlayerX] = useState(CONSTANTS.PLAYER_START_X);
+  const [volumeMusic, setVolumeMusic] = useState(CONSTANTS.BACKGROUND_MUSIC_VOLUME);
+  const [volumeSFX, setVolumeSFX] = useState(CONSTANTS.SFX_VOLUME);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [aliens, setAliens] = useState<Alien[]>([]);
   const [bullets, setBullets] = useState<Bullet[]>([]);
   const [powerUps, setPowerUps] = useState<PowerUp[]>([]);
@@ -122,17 +53,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const [wave, setWave] = useState(1);
   
   // Power-up states
-  const [activePowerUps, setActivePowerUps] = useState<{
-    doubleShot: number;
-    tripleShot: number;
-    shield: number;
-    speedBoost: number;
-    rapidFire: number;
-    laserBeam: number;
-    homingMissile: number;
-    timeSlow: number;
-    scoreMultiplier: number;
-  }>({
+  const [activePowerUps, setActivePowerUps] = useState<ActivePowerUps>({
     doubleShot: 0,
     tripleShot: 0,
     shield: 0,
@@ -141,7 +62,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     laserBeam: 0,
     homingMissile: 0,
     timeSlow: 0,
-    scoreMultiplier: 0
+    scoreMultiplier: 0,
+    extraLife: 0
   });
   
   const gameContainerRef = useRef<HTMLDivElement>(null);
@@ -156,6 +78,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const lastFireTime = useRef(0);
   const keysPressed = useRef<Set<string>>(new Set());
   const screenShakeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const finalWaveRef = useRef(1);
   
   // Use refs to track current state for collision detection
   const aliensRef = useRef<Alien[]>([]);
@@ -175,7 +98,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     powerUpsRef.current = powerUps;
   }, [powerUps]);
 
-  // Initialize stars
+  // Initialize stars and load leaderboard
   useEffect(() => {
     const initialStars: Star[] = [];
     for (let i = 0; i < 100; i++) {
@@ -189,6 +112,9 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       });
     }
     setStars(initialStars);
+
+    // Load leaderboard
+    setLeaderboard(leaderboardManager.getLeaderboard());
   }, []);
 
   // Safe audio manager wrapper
@@ -219,8 +145,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setParticles(prev => {
       const combined = [...prev, ...newParticles];
       // Limit total particles to prevent performance issues
-      if (combined.length > MAX_PARTICLES) {
-        return combined.slice(-MAX_PARTICLES);
+      if (combined.length > CONSTANTS.MAX_PARTICLES) {
+        return combined.slice(-CONSTANTS.MAX_PARTICLES);
       }
       return combined;
     });
@@ -301,15 +227,46 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       if (e.key === ' ' && gameStarted && !gameOver && !gamePaused) {
         e.preventDefault();
         const now = Date.now();
-        const fireDelay = activePowerUps.rapidFire > 0 ? 100 : 200;
-        
+        const fireDelay = activePowerUps.rapidFire > 0 ? CONSTANTS.PLAYER_RAPID_FIRE_DELAY : CONSTANTS.PLAYER_FIRE_DELAY;
+
         if (now - lastFireTime.current > fireDelay) {
           lastFireTime.current = now;
-          
+
           // Fire bullets based on active power-ups
           const newBullets: Bullet[] = [];
-          
-          if (activePowerUps.tripleShot > 0) {
+
+          // Laser beam - continuous vertical damage
+          if (activePowerUps.laserBeam > 0) {
+            // Create multiple laser segments for continuous beam effect
+            for (let i = 0; i < 10; i++) {
+              newBullets.push({
+                id: bulletIdCounter.current++,
+                x: playerX,
+                y: 90 - (i * 8),
+                isPlayerBullet: true,
+                damage: 2
+              });
+            }
+          }
+          // Homing missile - targets nearest enemy
+          else if (activePowerUps.homingMissile > 0 && aliensRef.current.length > 0) {
+            const nearestAlien = aliensRef.current.reduce((nearest, alien) => {
+              const dist = Math.sqrt(Math.pow(alien.x - playerX, 2) + Math.pow(alien.y - 90, 2));
+              const nearestDist = Math.sqrt(Math.pow(nearest.x - playerX, 2) + Math.pow(nearest.y - 90, 2));
+              return dist < nearestDist ? alien : nearest;
+            });
+
+            newBullets.push({
+              id: bulletIdCounter.current++,
+              x: playerX,
+              y: 90,
+              isPlayerBullet: true,
+              damage: 3,
+              isHoming: true,
+              targetId: nearestAlien.id
+            });
+          }
+          else if (activePowerUps.tripleShot > 0) {
             // Triple shot pattern
             newBullets.push(
               { id: bulletIdCounter.current++, x: playerX - 2, y: 90, isPlayerBullet: true, damage: 1 },
@@ -328,7 +285,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               { id: bulletIdCounter.current++, x: playerX, y: 90, isPlayerBullet: true, damage: 1 }
             );
           }
-          
+
           setBullets(prev => [...prev, ...newBullets]);
         }
       }
@@ -371,7 +328,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       // Move player with speed boost
       setPlayerX(prev => {
         let newX = prev;
-        const speed = activePowerUps.speedBoost > 0 ? 2.5 : 1.5;
+        const speed = activePowerUps.speedBoost > 0 ? CONSTANTS.PLAYER_SPEED_BOOST : CONSTANTS.PLAYER_SPEED;
         if (keysPressed.current.has('a') || keysPressed.current.has('arrowleft')) {
           newX = Math.max(5, prev - speed);
         }
@@ -388,15 +345,41 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       })));
 
       // Move bullets
-      setBullets(prev => prev.map(bullet => ({
-        ...bullet,
-        y: bullet.isPlayerBullet ? bullet.y - 2 : bullet.y + 1.5,
-      })).filter(bullet => bullet.isPlayerBullet ? bullet.y > -5 : bullet.y < 105));
+      setBullets(prev => prev.map(bullet => {
+        let newX = bullet.x;
+        let newY = bullet.y;
+
+        // Homing missile logic
+        if (bullet.isHoming && bullet.targetId !== undefined) {
+          const target = aliensRef.current.find(a => a.id === bullet.targetId);
+          if (target) {
+            // Move towards target
+            const dx = target.x - bullet.x;
+            const dy = target.y - bullet.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 0) {
+              const speed = 3;
+              newX = bullet.x + (dx / dist) * speed;
+              newY = bullet.y + (dy / dist) * speed;
+            }
+          } else {
+            // Target destroyed, move upward
+            newY = bullet.y - CONSTANTS.BULLET_SPEED;
+          }
+        } else {
+          // Normal bullet movement
+          const speedMult = timeSlowActive ? 0.5 : 1;
+          newY = bullet.isPlayerBullet ? bullet.y - (CONSTANTS.BULLET_SPEED * speedMult) : bullet.y + (CONSTANTS.ENEMY_BULLET_SPEED * speedMult);
+        }
+
+        return { ...bullet, x: newX, y: newY };
+      }).filter(bullet => bullet.isPlayerBullet ? bullet.y > -5 : bullet.y < 105));
 
       // Move aliens with different patterns
       setAliens(prev => prev.map(alien => {
         let newX = alien.x;
-        let newY = alien.y + alien.speed;
+        const speedMult = timeSlowActive ? 0.3 : 1;
+        let newY = alien.y + (alien.speed * speedMult);
         
         // Handle different movement patterns
         if (alien.type === EnemyType.ZIGZAG) {
@@ -484,8 +467,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
                 setCombo(1);
               }
               setLastKillTime(now);
-              
-              const points = stats.points * (1 + combo * 0.1);
+
+              const points = stats.points * (1 + combo * CONSTANTS.COMBO_SCORE_BONUS) * scoreMultiplier;
               setScore(prev => prev + Math.floor(points));
               
               // Spawn power-up chance
@@ -532,16 +515,36 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       // Check power-up collection
       currentPowerUps.forEach(powerUp => {
         const distance = Math.sqrt(Math.pow(powerUp.x - playerX, 2) + Math.pow(powerUp.y - 90, 2));
-        if (distance < 4) {
+        if (distance < CONSTANTS.POWERUP_COLLECTION_DISTANCE) {
           powerUpsToRemove.add(powerUp.id);
-          
-          // Apply power-up effect
-          setActivePowerUps(prev => ({
-            ...prev,
-            [powerUp.type]: Date.now() + 10000 // 10 seconds duration
-          }));
-          
-          createParticles(powerUp.x, powerUp.y, 6, '#22d3ee');
+
+          // Apply power-up effect using proper key mapping
+          const stateKey = powerUpTypeToStateKey(powerUp.type);
+
+          // Handle special power-ups
+          if (powerUp.type === PowerUpType.EXTRA_LIFE) {
+            setLives(prev => prev + 1);
+            safeAudioCall(() => audioManager.playSound('gameStart'));
+          } else if (powerUp.type === PowerUpType.SCORE_MULTIPLIER) {
+            setScoreMultiplier(prev => prev + 1);
+            setActivePowerUps(prev => ({
+              ...prev,
+              [stateKey]: Date.now() + CONSTANTS.POWERUP_DURATION
+            }));
+          } else if (powerUp.type === PowerUpType.TIME_SLOW) {
+            setTimeSlowActive(true);
+            setActivePowerUps(prev => ({
+              ...prev,
+              [stateKey]: Date.now() + CONSTANTS.POWERUP_DURATION
+            }));
+          } else {
+            setActivePowerUps(prev => ({
+              ...prev,
+              [stateKey]: Date.now() + CONSTANTS.POWERUP_DURATION
+            }));
+          }
+
+          createParticles(powerUp.x, powerUp.y, 6, CONSTANTS.PARTICLE_COLOR_POWERUP);
           safeAudioCall(() => audioManager.playSound('gameStart')); // Reuse sound for power-up
         }
       });
@@ -576,7 +579,7 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       // Update power-up timers
       setActivePowerUps(prev => {
         const now = Date.now();
-        return {
+        const newState = {
           doubleShot: prev.doubleShot > now ? prev.doubleShot : 0,
           tripleShot: prev.tripleShot > now ? prev.tripleShot : 0,
           shield: prev.shield > now ? prev.shield : 0,
@@ -585,8 +588,21 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           laserBeam: prev.laserBeam > now ? prev.laserBeam : 0,
           homingMissile: prev.homingMissile > now ? prev.homingMissile : 0,
           timeSlow: prev.timeSlow > now ? prev.timeSlow : 0,
-          scoreMultiplier: prev.scoreMultiplier > now ? prev.scoreMultiplier : 0
+          scoreMultiplier: prev.scoreMultiplier > now ? prev.scoreMultiplier : 0,
+          extraLife: prev.extraLife > now ? prev.extraLife : 0
         };
+
+        // Handle time slow expiration
+        if (prev.timeSlow > now && newState.timeSlow === 0) {
+          setTimeSlowActive(false);
+        }
+
+        // Handle score multiplier expiration
+        if (prev.scoreMultiplier > now && newState.scoreMultiplier === 0) {
+          setScoreMultiplier(1);
+        }
+
+        return newState;
       });
 
       // Check collisions with player
@@ -646,11 +662,19 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               setGameStarted(false);
               audioManager.stopBackgroundMusic();
               audioManager.playSound('gameOver');
-              
+
+              // Store final wave for leaderboard
+              finalWaveRef.current = wave;
+
               // Update high score
               if (score > highScore) {
                 setHighScore(score);
                 localStorage.setItem('spaceShooterHighScore', score.toString());
+              }
+
+              // Check if score qualifies for leaderboard
+              if (leaderboardManager.isHighScore(score)) {
+                setShowNamePrompt(true);
               }
             }
             return newLives;
@@ -726,13 +750,13 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
   const startGame = async () => {
     // Initialize audio on user interaction
     await audioManager.initializeOnUserInteraction();
-    
+
     setGameStarted(true);
     setGameOver(false);
     setGamePaused(false);
     setScore(0);
-    setLives(3);
-    setPlayerX(50);
+    setLives(CONSTANTS.INITIAL_LIVES);
+    setPlayerX(CONSTANTS.PLAYER_START_X);
     setAliens([]);
     setBullets([]);
     setPowerUps([]);
@@ -742,6 +766,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setCombo(0);
     setLastKillTime(0);
     setScreenShake(0);
+    setScoreMultiplier(1);
+    setTimeSlowActive(false);
     setActivePowerUps({
       doubleShot: 0,
       tripleShot: 0,
@@ -751,11 +777,12 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       laserBeam: 0,
       homingMissile: 0,
       timeSlow: 0,
-      scoreMultiplier: 0
+      scoreMultiplier: 0,
+      extraLife: 0
     });
     lastAlienSpawnRef.current = Date.now();
     lastFireTime.current = 0;
-    
+
     // Play start sound and begin background music
     audioManager.playSound('gameStart');
     setTimeout(() => {
@@ -782,8 +809,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     audioManager.stopBackgroundMusic();
     // Reset game state
     setScore(0);
-    setLives(3);
-    setPlayerX(50);
+    setLives(CONSTANTS.INITIAL_LIVES);
+    setPlayerX(CONSTANTS.PLAYER_START_X);
     setAliens([]);
     setBullets([]);
     setPowerUps([]);
@@ -793,6 +820,8 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
     setCombo(0);
     setLastKillTime(0);
     setScreenShake(0);
+    setScoreMultiplier(1);
+    setTimeSlowActive(false);
     setActivePowerUps({
       doubleShot: 0,
       tripleShot: 0,
@@ -802,14 +831,116 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
       laserBeam: 0,
       homingMissile: 0,
       timeSlow: 0,
-      scoreMultiplier: 0
+      scoreMultiplier: 0,
+      extraLife: 0
     });
   };
 
+  // Touch controls for mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!gameStarted || gameOver || gamePaused) return;
+    const touch = e.touches[0];
+    setTouchStartX(touch.clientX);
+    setTouchStartY(touch.clientY);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!gameStarted || gameOver || gamePaused || touchStartX === null) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const container = gameContainerRef.current;
+    if (!container) return;
+
+    const containerWidth = container.clientWidth;
+    const touchX = (touch.clientX / containerWidth) * 100;
+    setPlayerX(Math.max(5, Math.min(95, touchX)));
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!gameStarted || gameOver || gamePaused) return;
+
+    // Tap to shoot
+    if (touchStartX !== null && touchStartY !== null) {
+      const now = Date.now();
+      const fireDelay = activePowerUps.rapidFire > 0 ? CONSTANTS.PLAYER_RAPID_FIRE_DELAY : CONSTANTS.PLAYER_FIRE_DELAY;
+
+      if (now - lastFireTime.current > fireDelay) {
+        lastFireTime.current = now;
+        const newBullets: Bullet[] = [];
+
+        if (activePowerUps.tripleShot > 0) {
+          newBullets.push(
+            { id: bulletIdCounter.current++, x: playerX - 2, y: 90, isPlayerBullet: true, damage: 1 },
+            { id: bulletIdCounter.current++, x: playerX, y: 90, isPlayerBullet: true, damage: 1 },
+            { id: bulletIdCounter.current++, x: playerX + 2, y: 90, isPlayerBullet: true, damage: 1 }
+          );
+        } else if (activePowerUps.doubleShot > 0) {
+          newBullets.push(
+            { id: bulletIdCounter.current++, x: playerX - 1, y: 90, isPlayerBullet: true, damage: 1 },
+            { id: bulletIdCounter.current++, x: playerX + 1, y: 90, isPlayerBullet: true, damage: 1 }
+          );
+        } else {
+          newBullets.push(
+            { id: bulletIdCounter.current++, x: playerX, y: 90, isPlayerBullet: true, damage: 1 }
+          );
+        }
+
+        setBullets(prev => [...prev, ...newBullets]);
+      }
+    }
+
+    setTouchStartX(null);
+    setTouchStartY(null);
+  };
+
+  const togglePause = () => {
+    if (!gameStarted || gameOver) return;
+    setGamePaused(prev => {
+      const newPaused = !prev;
+      if (newPaused) {
+        safeAudioCall(() => audioManager.pauseBackgroundMusic());
+        safeAudioCall(() => audioManager.playSound('pause'));
+      } else {
+        safeAudioCall(() => audioManager.resumeBackgroundMusic());
+        safeAudioCall(() => audioManager.playSound('pause'));
+      }
+      return newPaused;
+    });
+  };
+
+  const handleNameSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = playerName.trim() || 'Anonymous';
+
+    // Add to leaderboard
+    leaderboardManager.addEntry(name, score, finalWaveRef.current);
+    setLeaderboard(leaderboardManager.getLeaderboard());
+
+    // Close prompt
+    setShowNamePrompt(false);
+    setPlayerName('');
+  };
+
+  const skipNamePrompt = () => {
+    leaderboardManager.addEntry('Anonymous', score, finalWaveRef.current);
+    setLeaderboard(leaderboardManager.getLeaderboard());
+    setShowNamePrompt(false);
+    setPlayerName('');
+  };
+
+  const toggleLeaderboard = () => {
+    setShowLeaderboard(prev => !prev);
+  };
+
   return (
-    <div 
+    <div
       ref={gameContainerRef}
       className="game-container bg-gradient-to-b from-black via-gray-900 to-black"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      role="application"
+      aria-label="Space Shooter Game"
     >
       {/* Stars background */}
       {stars.map((star) => (
@@ -848,9 +979,36 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               }}
               className="ml-4 px-3 py-1 border-2 border-green-400 bg-black text-green-400 font-mono text-sm hover:bg-green-400 hover:text-black transition-all"
               style={{ letterSpacing: '0.1em' }}
+              aria-label={isMuted ? 'Unmute sound' : 'Mute sound'}
+              aria-pressed={isMuted}
             >
               {isMuted ? 'UNMUTE' : 'MUTE'}
             </button>
+
+            {/* Pause button */}
+            {gameStarted && !gameOver && (
+              <button
+                onClick={togglePause}
+                className="ml-2 px-3 py-1 border-2 border-cyan-400 bg-black text-cyan-400 font-mono text-sm hover:bg-cyan-400 hover:text-black transition-all"
+                style={{ letterSpacing: '0.1em' }}
+                aria-label={gamePaused ? 'Resume game' : 'Pause game'}
+                aria-pressed={gamePaused}
+              >
+                {gamePaused ? 'RESUME' : 'PAUSE'}
+              </button>
+            )}
+
+            {/* Leaderboard button */}
+            {gameStarted && !gameOver && (
+              <button
+                onClick={toggleLeaderboard}
+                className="ml-2 px-3 py-1 border-2 border-yellow-400 bg-black text-yellow-400 font-mono text-sm hover:bg-yellow-400 hover:text-black transition-all"
+                style={{ letterSpacing: '0.1em' }}
+                aria-label="Toggle leaderboard"
+              >
+                LEADERBOARD
+              </button>
+            )}
           </div>
           
           <div className="flex gap-4 items-center">
@@ -874,30 +1032,50 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
         </div>
         
         {/* Power-up indicators */}
-        <div className="flex gap-2 mt-2 justify-end">
+        <div className="flex gap-2 mt-2 justify-end flex-wrap">
           {activePowerUps.doubleShot > Date.now() && (
-            <div className="px-2 py-1 bg-blue-500 text-white font-mono text-xs">
+            <div className="px-2 py-1 bg-blue-500 text-white font-mono text-xs" role="status" aria-live="polite">
               DOUBLE SHOT: {Math.ceil((activePowerUps.doubleShot - Date.now()) / 1000)}s
             </div>
           )}
           {activePowerUps.tripleShot > Date.now() && (
-            <div className="px-2 py-1 bg-purple-500 text-white font-mono text-xs">
+            <div className="px-2 py-1 bg-purple-500 text-white font-mono text-xs" role="status" aria-live="polite">
               TRIPLE SHOT: {Math.ceil((activePowerUps.tripleShot - Date.now()) / 1000)}s
             </div>
           )}
           {activePowerUps.shield > Date.now() && (
-            <div className="px-2 py-1 bg-green-500 text-white font-mono text-xs">
+            <div className="px-2 py-1 bg-green-500 text-white font-mono text-xs" role="status" aria-live="polite">
               SHIELD: {Math.ceil((activePowerUps.shield - Date.now()) / 1000)}s
             </div>
           )}
           {activePowerUps.speedBoost > Date.now() && (
-            <div className="px-2 py-1 bg-yellow-500 text-white font-mono text-xs">
+            <div className="px-2 py-1 bg-yellow-500 text-white font-mono text-xs" role="status" aria-live="polite">
               SPEED: {Math.ceil((activePowerUps.speedBoost - Date.now()) / 1000)}s
             </div>
           )}
           {activePowerUps.rapidFire > Date.now() && (
-            <div className="px-2 py-1 bg-red-500 text-white font-mono text-xs">
+            <div className="px-2 py-1 bg-red-500 text-white font-mono text-xs" role="status" aria-live="polite">
               RAPID FIRE: {Math.ceil((activePowerUps.rapidFire - Date.now()) / 1000)}s
+            </div>
+          )}
+          {activePowerUps.laserBeam > Date.now() && (
+            <div className="px-2 py-1 bg-green-500 text-white font-mono text-xs" role="status" aria-live="polite">
+              LASER BEAM: {Math.ceil((activePowerUps.laserBeam - Date.now()) / 1000)}s
+            </div>
+          )}
+          {activePowerUps.homingMissile > Date.now() && (
+            <div className="px-2 py-1 bg-orange-500 text-white font-mono text-xs" role="status" aria-live="polite">
+              HOMING: {Math.ceil((activePowerUps.homingMissile - Date.now()) / 1000)}s
+            </div>
+          )}
+          {activePowerUps.timeSlow > Date.now() && (
+            <div className="px-2 py-1 bg-indigo-500 text-white font-mono text-xs" role="status" aria-live="polite">
+              TIME SLOW: {Math.ceil((activePowerUps.timeSlow - Date.now()) / 1000)}s
+            </div>
+          )}
+          {activePowerUps.scoreMultiplier > Date.now() && (
+            <div className="px-2 py-1 bg-pink-500 text-white font-mono text-xs" role="status" aria-live="polite">
+              {scoreMultiplier}x SCORE: {Math.ceil((activePowerUps.scoreMultiplier - Date.now()) / 1000)}s
             </div>
           )}
         </div>
@@ -1010,53 +1188,81 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
 
       {/* Aliens - Larger Red Enemy Ships */}
       {gameStarted && !gameOver && aliens.map((alien) => (
-        <div
-          key={alien.id}
-          className="alien"
-          style={{ left: `${alien.x}%`, top: `${alien.y}%` }}
-        >
-          <svg viewBox="0 0 50 50" className="w-full h-full">
-            <defs>
-              <linearGradient id={`alienGradient${alien.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#ef4444" />
-                <stop offset="50%" stopColor="#dc2626" />
-                <stop offset="100%" stopColor="#991b1b" />
-              </linearGradient>
-            </defs>
-            {/* Main body - inverted triangle */}
-            <path
-              d="M25 8 L40 35 L25 30 L10 35 Z"
-              fill={`url(#alienGradient${alien.id})`}
-              stroke="#7f1d1d"
-              strokeWidth="2"
-            />
-            {/* Left wing */}
-            <path
-              d="M10 20 L5 25 L10 28 Z"
-              fill="#dc2626"
-              stroke="#991b1b"
-              strokeWidth="1.5"
-            />
-            {/* Right wing */}
-            <path
-              d="M40 20 L45 25 L40 28 Z"
-              fill="#dc2626"
-              stroke="#991b1b"
-              strokeWidth="1.5"
-            />
-            {/* Cockpit */}
-            <circle cx="25" cy="18" r="4" fill="#1f2937" />
-            <circle cx="25" cy="18" r="3" fill="#ef4444" opacity="0.7">
-              <animate attributeName="opacity" values="0.5;0.9;0.5" dur="1s" repeatCount="indefinite" />
-            </circle>
-            {/* Engine exhausts */}
-            <circle cx="18" cy="32" r="2" fill="#fbbf24" opacity="0.8">
-              <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite" />
-            </circle>
-            <circle cx="32" cy="32" r="2" fill="#fbbf24" opacity="0.8">
-              <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite" />
-            </circle>
-          </svg>
+        <div key={alien.id}>
+          <div
+            className="alien"
+            style={{ left: `${alien.x}%`, top: `${alien.y}%` }}
+            role="img"
+            aria-label={`${alien.type} enemy ship`}
+          >
+            <svg viewBox="0 0 50 50" className="w-full h-full">
+              <defs>
+                <linearGradient id={`alienGradient${alien.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#ef4444" />
+                  <stop offset="50%" stopColor="#dc2626" />
+                  <stop offset="100%" stopColor="#991b1b" />
+                </linearGradient>
+              </defs>
+              {/* Main body - inverted triangle */}
+              <path
+                d="M25 8 L40 35 L25 30 L10 35 Z"
+                fill={`url(#alienGradient${alien.id})`}
+                stroke="#7f1d1d"
+                strokeWidth="2"
+              />
+              {/* Left wing */}
+              <path
+                d="M10 20 L5 25 L10 28 Z"
+                fill="#dc2626"
+                stroke="#991b1b"
+                strokeWidth="1.5"
+              />
+              {/* Right wing */}
+              <path
+                d="M40 20 L45 25 L40 28 Z"
+                fill="#dc2626"
+                stroke="#991b1b"
+                strokeWidth="1.5"
+              />
+              {/* Cockpit */}
+              <circle cx="25" cy="18" r="4" fill="#1f2937" />
+              <circle cx="25" cy="18" r="3" fill="#ef4444" opacity="0.7">
+                <animate attributeName="opacity" values="0.5;0.9;0.5" dur="1s" repeatCount="indefinite" />
+              </circle>
+              {/* Engine exhausts */}
+              <circle cx="18" cy="32" r="2" fill="#fbbf24" opacity="0.8">
+                <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="32" cy="32" r="2" fill="#fbbf24" opacity="0.8">
+                <animate attributeName="opacity" values="0.6;1;0.6" dur="0.3s" repeatCount="indefinite" />
+              </circle>
+            </svg>
+          </div>
+
+          {/* Boss Health Bar */}
+          {alien.type === EnemyType.BOSS && (
+            <div
+              className="absolute z-10"
+              style={{
+                left: `${alien.x}%`,
+                top: `${alien.y - 5}%`,
+                transform: 'translateX(-50%)',
+                width: '100px'
+              }}
+            >
+              <div className="bg-red-900 border-2 border-red-500 h-3 relative">
+                <div
+                  className="bg-red-500 h-full transition-all duration-200"
+                  style={{ width: `${(alien.health / alien.maxHealth) * 100}%` }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse"></div>
+                </div>
+              </div>
+              <div className="text-center text-white font-mono text-xs mt-1 font-bold drop-shadow-[0_0_3px_rgba(0,0,0,1)]">
+                BOSS: {alien.health}/{alien.maxHealth}
+              </div>
+            </div>
+          )}
         </div>
       ))}
 
@@ -1077,6 +1283,113 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
           style={{ left: `${explosion.x}%`, top: `${explosion.y}%` }}
         />
       ))}
+
+      {/* Leaderboard Overlay (during game) */}
+      {showLeaderboard && gameStarted && !gameOver && (
+        <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/80">
+          <div className="retro-box border-4 border-yellow-400 bg-black p-8 max-w-2xl w-full mx-4">
+            <h2 className="text-4xl font-bold text-yellow-400 mb-6 text-center" style={{
+              fontFamily: 'monospace',
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase'
+            }}>
+              LEADERBOARD
+            </h2>
+
+            {leaderboard.length === 0 ? (
+              <p className="text-green-400 text-center font-mono text-lg mb-6">
+                No scores yet. Be the first!
+              </p>
+            ) : (
+              <div className="space-y-2 mb-6 max-h-96 overflow-y-auto">
+                {leaderboard.map((entry, index) => (
+                  <div
+                    key={entry.id}
+                    className="flex justify-between items-center p-3 border-2 border-green-400 bg-black/50"
+                    style={{ fontFamily: 'monospace' }}
+                  >
+                    <div className="flex items-center gap-4">
+                      <span className="text-yellow-400 text-xl font-bold w-8">#{index + 1}</span>
+                      <span className="text-green-400 text-lg">{entry.playerName}</span>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <span className="text-cyan-400 text-sm">WAVE {entry.wave}</span>
+                      <span className="text-green-400 text-xl font-bold">{entry.score.toString().padStart(6, '0')}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={toggleLeaderboard}
+              className="w-full retro-button px-8 py-4 border-4 border-yellow-400 bg-black text-yellow-400 font-bold text-xl hover:bg-yellow-400 hover:text-black transition-all"
+              style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.15em'
+              }}
+            >
+              CLOSE
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Name Prompt for High Score */}
+      {showNamePrompt && gameOver && (
+        <div className="absolute inset-0 flex items-center justify-center z-40 bg-black/90">
+          <div className="retro-box border-4 border-yellow-400 bg-black p-8 max-w-md">
+            <h2 className="text-4xl font-bold text-yellow-400 mb-4 text-center" style={{
+              fontFamily: 'monospace',
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase'
+            }}>
+              NEW HIGH SCORE!
+            </h2>
+
+            <p className="text-green-400 text-center font-mono mb-6">
+              Score: {score.toString().padStart(6, '0')}
+            </p>
+
+            <form onSubmit={handleNameSubmit} className="space-y-4">
+              <input
+                type="text"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                placeholder="Enter your name"
+                maxLength={20}
+                className="w-full px-4 py-3 border-4 border-green-400 bg-black text-green-400 font-mono text-lg focus:outline-none focus:border-yellow-400"
+                style={{ letterSpacing: '0.1em' }}
+                autoFocus
+              />
+
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  className="flex-1 retro-button px-6 py-3 border-4 border-green-400 bg-black text-green-400 font-bold text-lg hover:bg-green-400 hover:text-black transition-all"
+                  style={{
+                    fontFamily: 'monospace',
+                    letterSpacing: '0.15em'
+                  }}
+                >
+                  SUBMIT
+                </button>
+                <button
+                  type="button"
+                  onClick={skipNamePrompt}
+                  className="flex-1 retro-button px-6 py-3 border-4 border-red-400 bg-black text-red-400 font-bold text-lg hover:bg-red-400 hover:text-black transition-all"
+                  style={{
+                    fontFamily: 'monospace',
+                    letterSpacing: '0.15em'
+                  }}
+                >
+                  SKIP
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Start Screen - Retro Style */}
       {!gameStarted && !gameOver && (
@@ -1121,9 +1434,13 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
                 <span>MOVE RIGHT</span>
                 <span className="font-bold">→ or D</span>
               </div>
-              <div className="flex justify-between items-center pb-2">
+              <div className="flex justify-between items-center border-b border-green-400/30 pb-2">
                 <span>FIRE</span>
                 <span className="font-bold">SPACE</span>
+              </div>
+              <div className="flex justify-between items-center pb-2">
+                <span>PAUSE</span>
+                <span className="font-bold">ESC</span>
               </div>
             </div>
           </div>
@@ -1136,9 +1453,46 @@ export default function SpaceShooterGame(props: SpaceShooterGameProps) {
               fontFamily: 'monospace',
               letterSpacing: '0.2em'
             }}
+            aria-label="Start new game"
+            autoFocus
           >
             START GAME
           </button>
+
+          {/* Touch Controls Info for Mobile */}
+          <div className="mt-6 text-green-400 text-sm md:hidden" style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}>
+            TOUCH: Move ship • TAP: Fire
+          </div>
+
+          {/* Leaderboard Preview on Start Screen */}
+          {leaderboard.length > 0 && (
+            <div className="mt-12 retro-box border-4 border-yellow-400 bg-black p-6 max-w-2xl w-full">
+              <h3 className="text-2xl font-bold text-yellow-400 mb-4 text-center" style={{
+                fontFamily: 'monospace',
+                letterSpacing: '0.15em'
+              }}>
+                TOP PLAYERS
+              </h3>
+              <div className="space-y-2">
+                {leaderboard.slice(0, 5).map((entry, index) => (
+                  <div
+                    key={entry.id}
+                    className="flex justify-between items-center p-2 border-2 border-green-400/30 bg-black/50"
+                    style={{ fontFamily: 'monospace' }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-yellow-400 font-bold w-6">#{index + 1}</span>
+                      <span className="text-green-400">{entry.playerName}</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-cyan-400 text-xs">W{entry.wave}</span>
+                      <span className="text-green-400 font-bold">{entry.score.toString().padStart(6, '0')}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Retro decoration */}
           <div className="mt-8 text-green-400/50 text-xs" style={{ fontFamily: 'monospace' }}>
