@@ -76,6 +76,18 @@ body {
   }
 }
 
+@keyframes spin {
+  from {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.1);
+  }
+  to {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
 .star {
   position: absolute;
   background: white;
